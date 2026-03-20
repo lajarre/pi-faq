@@ -1,0 +1,15 @@
+{
+  "name": "pi-doc-faq",
+  "version": "0.1.0",
+  "description": "Pi extension for agent knowledge capture into doc/faq/ and doc/ref/",
+  "keywords": ["pi-package"],
+  "pi": {
+    "extensions": ["./extensions"],
+    "skills": ["./skills"]
+  },
+  "peerDependencies": {
+    "@mariozechner/pi-coding-agent": "*",
+    "@mariozechner/pi-ai": "*",
+    "@sinclair/typebox": "*"
+  }
+}
