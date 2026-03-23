@@ -7,7 +7,6 @@ import {
   resolveArea,
   loadAreaConfig,
 } from './area.js';
-import type { AreaConfig } from './area.js';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -15,9 +14,28 @@ import { fileURLToPath } from 'node:url';
 const EXT_DIR = dirname(fileURLToPath(import.meta.url));
 const PKG_DIR = join(EXT_DIR, '..');
 const HOME = process.env.HOME ?? '';
-const areaConfig: AreaConfig = loadAreaConfig(
-  join(HOME, '.pi', 'agent', 'config', 'pi-faq.json')
+const CONFIG_PATH = join(
+  HOME, '.pi', 'agent', 'config', 'pi-faq.json'
 );
+const areaConfigResult = loadAreaConfig(CONFIG_PATH);
+
+let configHintShown = false;
+
+function showConfigHint(
+  notify: (
+    msg: string,
+    level?: "info" | "warning" | "error"
+  ) => void
+) {
+  if (configHintShown || areaConfigResult.found) return;
+  configHintShown = true;
+  notify(
+    `No config found at ${CONFIG_PATH}. ` +
+    `Using $PWD/doc/. To configure, copy ` +
+    `config.json.example from the pi-faq repo.`,
+    "info"
+  );
+}
 
 interface QnaModeData {
   active: boolean;
@@ -89,7 +107,7 @@ export default function createExtension(
   pi.on("before_agent_start", async (event, ctx) => {
     if (!qnaActive) return;
 
-    const area = resolveArea(ctx.cwd, areaConfig);
+    const area = resolveArea(ctx.cwd, areaConfigResult.config);
 
     // Load helper-mode (behavioral rules)
     const helperPath = join(
@@ -143,8 +161,9 @@ export default function createExtension(
       const isOff = args.trim().toLowerCase() === 'off';
       qnaActive = !isOff;
       pi.appendEntry('qna-mode', { active: qnaActive });
+      if (qnaActive) showConfigHint(ctx.ui.notify);
 
-      const area = resolveArea(ctx.cwd, areaConfig);
+      const area = resolveArea(ctx.cwd, areaConfigResult.config);
       if (qnaActive) {
         ctx.ui.notify(
           `Q&A mode ON. Capturing to ` +
@@ -162,8 +181,9 @@ export default function createExtension(
   pi.registerCommand('retro', {
     description: 'Extract learnings from session',
     handler: async (args, ctx) => {
-      const session = args.trim() || '';
-      const area = resolveArea(ctx.cwd, areaConfig);
+      showConfigHint(ctx.ui.notify);
+      const session = args.trim();
+      const area = resolveArea(ctx.cwd, areaConfigResult.config);
       const target = session
         ? `session '${session}'`
         : 'current session';

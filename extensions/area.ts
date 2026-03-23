@@ -13,14 +13,28 @@ export interface AreaResolution {
   source: string;
 }
 
+export interface AreaConfigResult {
+  config: AreaConfig;
+  found: boolean;
+  path: string;
+}
+
 export function loadAreaConfig(
   configPath: string
-): AreaConfig {
+): AreaConfigResult {
   try {
     const raw = readFileSync(configPath, 'utf-8');
-    return JSON.parse(raw) as AreaConfig;
+    return {
+      config: JSON.parse(raw) as AreaConfig,
+      found: true,
+      path: configPath,
+    };
   } catch {
-    return {};
+    return {
+      config: {},
+      found: false,
+      path: configPath,
+    };
   }
 }
 
