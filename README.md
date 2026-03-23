@@ -85,7 +85,7 @@ deeper into any session.
 
 ## configuration
 
-Create `extensions/config.json` next to the extension:
+Create `~/.pi/agent/config/pi-faq.json`:
 
 ```json
 {

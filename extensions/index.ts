@@ -14,8 +14,9 @@ import { fileURLToPath } from 'node:url';
 
 const EXT_DIR = dirname(fileURLToPath(import.meta.url));
 const PKG_DIR = join(EXT_DIR, '..');
+const HOME = process.env.HOME ?? '';
 const areaConfig: AreaConfig = loadAreaConfig(
-  join(EXT_DIR, 'config.json')
+  join(HOME, '.pi', 'agent', 'config', 'pi-faq.json')
 );
 
 interface QnaModeData {
