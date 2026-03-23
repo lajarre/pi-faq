@@ -1,15 +1,37 @@
 {
-  "name": "pi-doc-faq",
+  "name": "pi-faq",
   "version": "0.1.0",
-  "description": "Pi extension for agent knowledge capture into doc/faq/ and doc/ref/",
+  "description": "Knowledge capture to doc/faq/ and doc/ref/",
+  "author": "lajarre",
+  "license": "MIT",
   "keywords": ["pi-package"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lajarre/pi-faq.git"
+  },
+  "files": [
+    "extensions/",
+    "internal/",
+    "skills/",
+    "prompts/",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
   "pi": {
     "extensions": ["./extensions"],
     "skills": ["./skills"]
   },
   "peerDependencies": {
     "@mariozechner/pi-coding-agent": "*",
-    "@mariozechner/pi-ai": "*",
+    "@sinclair/typebox": "*"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "@types/node": "^20.0.0",
+    "@mariozechner/pi-coding-agent": "*",
     "@sinclair/typebox": "*"
   }
 }
