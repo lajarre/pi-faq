@@ -7,7 +7,10 @@ import {
   resolveArea,
   loadAreaConfig,
 } from './area.js';
-import { readFileSync } from 'node:fs';
+import {
+  existsSync,
+  readFileSync,
+} from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -84,6 +87,29 @@ function restoreQnaState(
   return active;
 }
 
+function getDocHint(
+  area: ReturnType<typeof resolveArea>
+): string {
+  const hasFaq = existsSync(area.faqDir);
+  const hasRef = existsSync(area.refDir);
+
+  if (!hasFaq && !hasRef) return '';
+
+  const lines = [
+    'local docs may exist here:',
+  ];
+
+  if (hasFaq) {
+    lines.push(`- ${area.faqDir} — terse notes`);
+  }
+  if (hasRef) {
+    lines.push(`- ${area.refDir} — longer refs`);
+  }
+
+  lines.push('search them when relevant.');
+  return lines.join('\n');
+}
+
 export default function createExtension(
   pi: ExtensionAPI
 ) {
@@ -103,11 +129,19 @@ export default function createExtension(
     qnaActive = restoreQnaState(ctx);
   });
 
-  // Inject helper-mode + writing rules when QNA is active
+  // Inject local doc hint always; add Q&A rules when active
   pi.on("before_agent_start", async (event, ctx) => {
-    if (!qnaActive) return;
-
     const area = resolveArea(ctx.cwd, areaConfigResult.config);
+    const docHint = getDocHint(area);
+
+    if (!qnaActive) {
+      if (!docHint) return;
+      return {
+        systemPrompt: event.systemPrompt +
+          '\n\n## local docs\n\n' +
+          docHint,
+      };
+    }
 
     // Load helper-mode (behavioral rules)
     const helperPath = join(
@@ -141,16 +175,20 @@ export default function createExtension(
       .replace(/\{REF_DIR\}/g, area.refDir)
       .replace(/\{DOC_ROOT\}/g, area.docRoot);
 
+    const promptParts = [event.systemPrompt];
+    promptParts.push(
+      '## Q&A mode is ACTIVE\n\n' +
+      `FAQ dir: ${area.faqDir}\n` +
+      `Ref dir: ${area.refDir}\n` +
+      `Source: ${area.source}\n\n` +
+      fillPaths(helperContent) +
+      '\n\n---\n\n' +
+      '## Writing conventions (inlined)\n\n' +
+      fillPaths(writingContent)
+    );
+
     return {
-      systemPrompt: event.systemPrompt +
-        '\n\n## Q&A mode is ACTIVE\n\n' +
-        `FAQ dir: ${area.faqDir}\n` +
-        `Ref dir: ${area.refDir}\n` +
-        `Source: ${area.source}\n\n` +
-        fillPaths(helperContent) +
-        '\n\n---\n\n' +
-        '## Writing conventions (inlined)\n\n' +
-        fillPaths(writingContent),
+      systemPrompt: promptParts.join('\n\n'),
     };
   });
 

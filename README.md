@@ -36,6 +36,10 @@ and writes them to the same folders.
 Both commands are user-triggered — the agent may
 suggest them but never activates without consent.
 
+Even with `/qna` off, pi-faq adds a terse prompt
+hint when `doc/faq/` or `doc/ref/` exists, so
+sessions know local docs may be worth searching.
+
 ## doc structure
 
 ```
