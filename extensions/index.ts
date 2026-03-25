@@ -53,7 +53,8 @@ function stripFrontmatter(content: string): string {
 
 function loadRetroPrompt(
   target: string,
-  area: ReturnType<typeof resolveArea>
+  area: ReturnType<typeof resolveArea>,
+  focus?: string
 ): string {
   const path = join(PKG_DIR, 'prompts', 'retro.md');
   let prompt = '';
@@ -62,13 +63,25 @@ function loadRetroPrompt(
       readFileSync(path, 'utf-8')
     );
   } catch {
-    prompt = 'Extract learnings from ' + target;
+    prompt = 'Extract learnings from ' + target +
+      (focus ? `. Focus on: ${focus}` : '');
   }
+  const focusBlock = focus
+    ? `## focus\n\nConcentrate on: ${focus}`
+    : '';
+  const focusQuery = focus
+    ? `Focus especially on: ${focus}`
+    : '';
+  const lit = (s: string) => () => s;
   return prompt
-    .replace(/\{\{SESSION_TARGET\}\}/g, target)
-    .replace(/\{\{DOC_ROOT\}\}/g, area.docRoot)
-    .replace(/\{\{FAQ_DIR\}\}/g, area.faqDir)
-    .replace(/\{\{REF_DIR\}\}/g, area.refDir);
+    .replace(/\{\{SESSION_TARGET\}\}/g, lit(target))
+    .replace(/\{\{DOC_ROOT\}\}/g, lit(area.docRoot))
+    .replace(/\{\{FAQ_DIR\}\}/g, lit(area.faqDir))
+    .replace(/\{\{REF_DIR\}\}/g, lit(area.refDir))
+    .replace(/\{\{FOCUS\}\}\n*/g,
+      lit(focusBlock ? focusBlock + '\n' : ''))
+    .replace(/\{\{FOCUS_QUERY\}\}\n?/g,
+      lit(focusQuery ? focusQuery + '\n' : ''));
 }
 
 function restoreQnaState(
@@ -216,17 +229,48 @@ export default function createExtension(
   });
 
   // /retro command
+  // usage: /retro [session] [focus text]
+  // session is a UUID or prefix (hex/dashes);
+  // everything else is focus guidance.
   pi.registerCommand('retro', {
-    description: 'Extract learnings from session',
+    description:
+      'Extract learnings from session ' +
+      '(optional: session id + focus prompt)',
     handler: async (args, ctx) => {
       showConfigHint(ctx.ui.notify);
-      const session = args.trim();
       const area = resolveArea(ctx.cwd, areaConfigResult.config);
+
+      const parts = args.trim();
+      let session = '';
+      let focus = '';
+
+      // Split on first whitespace to isolate token 1.
+      // Session IDs are UUIDs or hex prefixes: the
+      // first token is a session if it is entirely
+      // hex chars and dashes, ≥8 chars.
+      const spaceIdx = parts.search(/\s/);
+      const firstToken = spaceIdx === -1
+        ? parts
+        : parts.slice(0, spaceIdx);
+      const isSession = /^[0-9a-f][0-9a-f-]{7,}$/i
+        .test(firstToken);
+
+      if (isSession) {
+        session = firstToken;
+        focus = spaceIdx === -1
+          ? ''
+          : parts.slice(spaceIdx).trim();
+      } else {
+        focus = parts;
+      }
+
       const target = session
         ? `session '${session}'`
         : 'current session';
 
-      pi.sendUserMessage(loadRetroPrompt(target, area));
+      pi.sendUserMessage(
+        loadRetroPrompt(target, area, focus || undefined)
+      );
     },
   });
 
@@ -274,7 +318,9 @@ export default function createExtension(
     promptGuidelines: [
       "Suggest /retro at end of long sessions " +
       "with significant learnings (gotchas, " +
-      "discoveries, decisions).",
+      "discoveries, decisions). Mention that " +
+      "a focus prompt can guide extraction " +
+      "(e.g. /retro the debugging approach).",
       "Do not suggest if user already ran " +
       "/retro this session.",
     ],

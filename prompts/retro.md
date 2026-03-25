@@ -7,6 +7,8 @@ Extract durable knowledge from {{SESSION_TARGET}}.
 
 **REQUIRED:** read the `doc-faq-writing` skill first.
 
+{{FOCUS}}
+
 ## error handling — check first
 
 - if `session_ask` cannot find {{SESSION_TARGET}} →
@@ -19,6 +21,7 @@ Extract durable knowledge from {{SESSION_TARGET}}.
 1. Use `session_ask` to review {{SESSION_TARGET}}:
    "What non-obvious things were learned?
    Gotchas, config details, decisions, workarounds?"
+   {{FOCUS_QUERY}}
 
 2. For each learning, decide:
    - terse (gotcha, tip, config) → `{{FAQ_DIR}}`
