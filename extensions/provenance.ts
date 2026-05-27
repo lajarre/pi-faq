@@ -9,7 +9,11 @@ export function homeRelativePath(path: string, home: string): string {
     return '~';
   }
 
-  if (!relativeToHome.startsWith('..') && !isAbsolute(relativeToHome)) {
+  if (
+    relativeToHome !== '..' &&
+    !relativeToHome.startsWith('../') &&
+    !isAbsolute(relativeToHome)
+  ) {
     return `~/${relativeToHome}`;
   }
 
@@ -87,7 +91,7 @@ function hasDuplicateSessionBullet(markdown: string, bullet: string): boolean {
     const existingParts = parsePathBullet(line);
     if (
       existingParts &&
-      existingParts.identity === newBulletParts.identity &&
+      existingParts.sessionId === newBulletParts.sessionId &&
       existingParts.path === newBulletParts.path
     ) {
       return true;
@@ -99,14 +103,19 @@ function hasDuplicateSessionBullet(markdown: string, bullet: string): boolean {
 
 function parsePathBullet(
   bullet: string
-): { identity: string; path: string } | undefined {
+): { sessionId: string; path: string } | undefined {
   const match = /^- (?<identity>.+) @ `(?<path>[^`]+)`$/.exec(bullet);
   if (!match?.groups) {
     return undefined;
   }
 
+  const sessionId = /^\S+/.exec(match.groups.identity)?.[0];
+  if (!sessionId) {
+    return undefined;
+  }
+
   return {
-    identity: match.groups.identity,
+    sessionId,
     path: match.groups.path,
   };
 }

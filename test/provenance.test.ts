@@ -24,6 +24,13 @@ describe('home-relative provenance paths', () => {
     );
   });
 
+  it('formats HOME children whose first segment starts with dot-dot', () => {
+    assert.equal(
+      homeRelativePath('/Users/example/..workspace/repo', home),
+      '~/..workspace/repo'
+    );
+  });
+
   it('leaves paths outside HOME absolute', () => {
     assert.equal(
       homeRelativePath('/opt/project', home),
@@ -93,6 +100,20 @@ describe('session block updates', () => {
     const markdown = `# note\n\n---\n\n## sessions\n\n${bullet}\n`;
 
     assert.equal(appendUniqueSessionBullet(markdown, bullet), markdown);
+  });
+
+  it('dedupes session/path pairs when display names differ or are absent', () => {
+    const path = '/Users/example/workspace/repo';
+    const renamedSession = { ...session, name: 'renamed-session' };
+    const unnamedSession = { id: session.id };
+    const markdown =
+      '# note\n\n---\n\n## sessions\n\n' +
+      `${formatSessionBullet(renamedSession, path, home)}\n`;
+
+    assert.equal(
+      appendUniqueSessionBullet(markdown, formatSessionBullet(unnamedSession, path, home)),
+      markdown
+    );
   });
 
   it('preserves existing session bullets without paths', () => {
