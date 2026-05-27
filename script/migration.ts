@@ -287,6 +287,11 @@ export async function applyMigrationPlan(
     throw new Error('refusing to apply migration with conflicts; rerun with --write-conflicts to write sidecars');
   }
 
+  if (hasConflicts && options.writeConflicts) {
+    const conflictDir = options.conflictDir ?? defaultConflictDir(plan.knowledgeBase, options.now ?? new Date());
+    await writeConflictSidecars(plan, conflictDir);
+  }
+
   for (const item of plan.items) {
     if (item.kind === 'create') {
       const sourceContent = await readFile(item.sourcePath, 'utf-8');
@@ -312,11 +317,6 @@ export async function applyMigrationPlan(
       );
       await writeFile(item.destinationPath, merged, 'utf-8');
     }
-  }
-
-  if (hasConflicts && options.writeConflicts) {
-    const conflictDir = options.conflictDir ?? defaultConflictDir(plan.knowledgeBase, options.now ?? new Date());
-    await writeConflictSidecars(plan, conflictDir);
   }
 }
 
@@ -469,7 +469,7 @@ async function writeConflictSidecars(plan: MigrationPlan, conflictDir: string): 
       await writeFile(
         join(conflictDir, `conflict-${index}.md`),
         renderConflictSidecar(item, conflict),
-        'utf-8'
+        { encoding: 'utf-8', flag: 'wx' }
       );
       index += 1;
     }

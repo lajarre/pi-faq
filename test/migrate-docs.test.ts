@@ -353,6 +353,43 @@ describe('migration apply, merges, duplicates, and conflicts', () => {
     assert.equal(await readFile(destination, 'utf-8'), destContent);
   });
 
+  it('prepares conflict sidecars before mutating destinations', async () => {
+    const home = await tempHome();
+    const knowledgeBase = join(home, 'kb');
+    const conflictDir = join(home, 'review');
+    const conflictSource = join(home, 'workspace', 'repo', 'doc', 'ref', 'conflict.md');
+    const createSource = join(home, 'workspace', 'repo', 'doc', 'ref', 'create.md');
+    const conflictDestination = join(knowledgeBase, 'ref', 'conflict.md');
+    const createDestination = join(knowledgeBase, 'ref', 'create.md');
+    const conflictDestinationContent = markdown('# dest\n\n## same\n\nDestination content.\n');
+    const existingSidecar = join(conflictDir, 'conflict-1.md');
+    await writeText(conflictSource, markdown('# source\n\n## same\n\nIncoming content.\n'));
+    await writeText(createSource, '# create\n\n## answer\n\nCreate content.\n');
+    await writeText(conflictDestination, conflictDestinationContent);
+    await writeText(existingSidecar, 'previous review artifact');
+
+    const plan = await createMigrationPlan({
+      home,
+      knowledgeBase,
+      sources: await scanLocalDocs({ home }),
+    });
+
+    assert.equal(plan.summary.conflicts, 1);
+    assert.equal(plan.summary.creates, 1);
+    await assert.rejects(
+      applyMigrationPlan(plan, {
+        home,
+        apply: true,
+        writeConflicts: true,
+        conflictDir,
+      }),
+      /EEXIST|exist/i
+    );
+    assert.equal(await readFile(conflictDestination, 'utf-8'), conflictDestinationContent);
+    assert.equal(existsSync(createDestination), false);
+    assert.equal(await readFile(existingSidecar, 'utf-8'), 'previous review artifact');
+  });
+
   it('writes reviewable conflict sidecars to the default or custom conflict directory', async () => {
     const home = await tempHome();
     const knowledgeBase = join(home, 'kb');
