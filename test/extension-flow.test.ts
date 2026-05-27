@@ -11,6 +11,10 @@ import {
   type KnowledgeResult,
   type RetroPromptValues,
 } from '../extensions/flow.ts';
+import {
+  getContextCwd,
+  sourcePathFromContext,
+} from '../extensions/provenance.ts';
 
 const resolution: KnowledgeBaseResolution = {
   knowledgeBase: '/knowledgebase',
@@ -300,6 +304,18 @@ describe('/retro flow decisions', () => {
     assert.match(sent[0] ?? '', /source=\/source\/project/);
     assert.match(sent[0] ?? '', /Concentrate on: capture config details/);
     assert.match(sent[0] ?? '', /Focus especially on: capture config details/);
+  });
+});
+
+describe('extension context provenance', () => {
+  it('does not invent source paths from the extension process cwd', () => {
+    const context = {} as Parameters<typeof getContextCwd>[0];
+
+    assert.equal(getContextCwd(context), undefined);
+    assert.equal(sourcePathFromContext(context, {
+      home: '/tmp/pi-faq-home',
+      exists: () => true,
+    }), undefined);
   });
 });
 

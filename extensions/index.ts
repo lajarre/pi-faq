@@ -20,8 +20,7 @@ import {
   type RetroPromptValues,
 } from './flow.js';
 import {
-  findProjectRoot,
-  homeRelativePath,
+  sourcePathFromContext,
 } from './provenance.js';
 import {
   existsSync,
@@ -37,19 +36,6 @@ const CONFIG_DISPLAY_PATH = '~/.pi/agent/config/pi-faq.json';
 interface QnaModeData {
   active: boolean;
 }
-
-type ContextWithCwd = ExtensionContext & {
-  cwd?: string;
-  workingDirectory?: string;
-  workspace?: {
-    cwd?: string;
-    root?: string;
-  };
-  session?: {
-    cwd?: string;
-    workingDirectory?: string;
-  };
-};
 
 function stripFrontmatter(content: string): string {
   return content.replace(
@@ -117,32 +103,6 @@ function restoreQnaState(
   return active;
 }
 
-function sourcePathFromContext(
-  ctx: ExtensionContext
-): string | undefined {
-  const home = currentHome();
-  const cwd = getContextCwd(ctx);
-  if (!cwd) {
-    return undefined;
-  }
-
-  const projectRoot = findProjectRoot(cwd, existsSync);
-  return home ? homeRelativePath(projectRoot, home) : projectRoot;
-}
-
-function getContextCwd(
-  ctx: ExtensionContext
-): string | undefined {
-  const dynamicContext = ctx as ContextWithCwd;
-  return dynamicContext.cwd ??
-    dynamicContext.workingDirectory ??
-    dynamicContext.workspace?.cwd ??
-    dynamicContext.workspace?.root ??
-    dynamicContext.session?.cwd ??
-    dynamicContext.session?.workingDirectory ??
-    process.cwd();
-}
-
 function notifyAll(
   ctx: ExtensionContext,
   notifications: FlowNotification[]
@@ -174,7 +134,10 @@ export default function createExtension(
     const systemPrompt = buildBeforeAgentStartPrompt({
       systemPrompt: event.systemPrompt,
       qnaActive,
-      sourcePath: sourcePathFromContext(ctx),
+      sourcePath: sourcePathFromContext(ctx, {
+        home: currentHome(),
+        exists: existsSync,
+      }),
       resolveKnowledgeBase: loadConfiguredKnowledgeBase,
       exists: existsSync,
       helperModeContent: loadPackageFile(
@@ -217,7 +180,10 @@ export default function createExtension(
     handler: async (args, ctx) => {
       const decision = handleRetroCommand({
         args,
-        sourcePath: sourcePathFromContext(ctx),
+        sourcePath: sourcePathFromContext(ctx, {
+          home: currentHome(),
+          exists: existsSync,
+        }),
         resolveKnowledgeBase: loadConfiguredKnowledgeBase,
         ensureKnowledgeBaseDirs,
         buildPrompt: loadRetroPrompt,

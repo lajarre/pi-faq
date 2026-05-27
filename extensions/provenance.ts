@@ -1,5 +1,23 @@
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 
+export interface ProvenanceContext {
+  cwd?: string;
+  workingDirectory?: string;
+  workspace?: {
+    cwd?: string;
+    root?: string;
+  };
+  session?: {
+    cwd?: string;
+    workingDirectory?: string;
+  };
+}
+
+export interface SourcePathOptions {
+  home: string;
+  exists: (path: string) => boolean;
+}
+
 export function homeRelativePath(path: string, home: string): string {
   const absolutePath = resolve(path);
   const absoluteHome = resolve(home);
@@ -37,6 +55,30 @@ export function findProjectRoot(
     }
     current = parent;
   }
+}
+
+export function getContextCwd(
+  ctx: ProvenanceContext
+): string | undefined {
+  return ctx.cwd ??
+    ctx.workingDirectory ??
+    ctx.workspace?.cwd ??
+    ctx.workspace?.root ??
+    ctx.session?.cwd ??
+    ctx.session?.workingDirectory;
+}
+
+export function sourcePathFromContext(
+  ctx: ProvenanceContext,
+  options: SourcePathOptions
+): string | undefined {
+  const cwd = getContextCwd(ctx);
+  if (!cwd) {
+    return undefined;
+  }
+
+  const projectRoot = findProjectRoot(cwd, options.exists);
+  return options.home ? homeRelativePath(projectRoot, options.home) : projectRoot;
 }
 
 export function formatSessionBullet(
