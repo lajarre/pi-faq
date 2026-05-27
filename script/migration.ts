@@ -156,12 +156,20 @@ export async function createMigrationPlan(
   options: CreateMigrationPlanOptions
 ): Promise<MigrationPlan> {
   const items: MigrationItem[] = [];
+  const destinationContents = new Map<string, string>();
 
   for (const source of options.sources) {
     const destinationPath = join(options.knowledgeBase, source.kind, basename(source.sourcePath));
     const sourceContent = await readFile(source.sourcePath, 'utf-8');
+    let destinationContent = destinationContents.get(destinationPath);
 
-    if (!existsSync(destinationPath)) {
+    if (destinationContent === undefined) {
+      destinationContent = existsSync(destinationPath)
+        ? await readFile(destinationPath, 'utf-8')
+        : undefined;
+    }
+
+    if (destinationContent === undefined) {
       items.push({
         kind: 'create',
         docKind: source.kind,
@@ -172,10 +180,13 @@ export async function createMigrationPlan(
         duplicateSections: [],
         conflicts: [],
       });
+      destinationContents.set(
+        destinationPath,
+        addMigrationProvenance(sourceContent, source.sourceProjectRoot, options.home)
+      );
       continue;
     }
 
-    const destinationContent = await readFile(destinationPath, 'utf-8');
     const sourceMarkdown = parseMarkdown(sourceContent);
     const destinationMarkdown = parseMarkdown(destinationContent);
     const mergeSections: MarkdownSection[] = [];
@@ -214,6 +225,19 @@ export async function createMigrationPlan(
       duplicateSections,
       conflicts,
     });
+
+    if (mergeSections.length > 0) {
+      destinationContents.set(
+        destinationPath,
+        mergeMarkdown(
+          destinationContent,
+          sourceContent,
+          mergeSections,
+          source.sourceProjectRoot,
+          options.home
+        )
+      );
+    }
   }
 
   return {
@@ -272,7 +296,7 @@ export async function applyMigrationPlan(
         options.home
       );
       await mkdir(dirname(item.destinationPath), { recursive: true });
-      await writeFile(item.destinationPath, content, 'utf-8');
+      await writeFile(item.destinationPath, content, { encoding: 'utf-8', flag: 'wx' });
       continue;
     }
 

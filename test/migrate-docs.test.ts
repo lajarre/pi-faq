@@ -208,6 +208,72 @@ describe('migration apply, merges, duplicates, and conflicts', () => {
     assert.equal(await readFile(source, 'utf-8'), sourceContent);
   });
 
+  it('plans same-destination creates as one create plus merge and preserves both sources', async () => {
+    const home = await tempHome();
+    const knowledgeBase = join(home, 'kb');
+    const workspaceSource = join(home, 'workspace', 'repo-a', 'doc', 'faq', 'same.md');
+    const pSource = join(home, 'p', 'repo-b', 'doc', 'faq', 'same.md');
+    const destination = join(knowledgeBase, 'faq', 'same.md');
+    const workspaceContent = markdown('# workspace\n\n## workspace answer\n\nWorkspace content.\n');
+    const pContent = markdown(
+      '# p\n\n## p answer\n\nP content.\n',
+      '- p-session @ `~/p/repo-b`\n'
+    );
+    await writeText(workspaceSource, workspaceContent);
+    await writeText(pSource, pContent);
+
+    const plan = await createMigrationPlan({
+      home,
+      knowledgeBase,
+      sources: await scanLocalDocs({ home }),
+    });
+    const dryRun = renderMigrationPlan(plan);
+    const destinationCreates = plan.items.filter(
+      (item) => item.destinationPath === destination && item.kind === 'create'
+    );
+    const dryRunCreates = dryRun.split('\n').filter(
+      (line) => line.startsWith('create:') && line.endsWith(destination)
+    );
+
+    assert.equal(existsSync(destination), false);
+    assert.equal(destinationCreates.length, 1);
+    assert.equal(dryRunCreates.length, 1);
+    assert.equal(plan.summary.creates, 1);
+    assert.equal(plan.summary.merges, 1);
+
+    await applyMigrationPlan(plan, { home, apply: true, writeConflicts: false });
+
+    const migrated = await readFile(destination, 'utf-8');
+    assert.match(migrated, /## workspace answer\n\nWorkspace content\./);
+    assert.match(migrated, /## p answer\n\nP content\./);
+    assert.match(migrated, /- migrated from local docs @ `~\/workspace\/repo-a`/);
+    assert.match(migrated, /- migrated from local docs @ `~\/p\/repo-b`/);
+    assert.equal(await readFile(workspaceSource, 'utf-8'), workspaceContent);
+    assert.equal(await readFile(pSource, 'utf-8'), pContent);
+  });
+
+  it('does not overwrite a destination that appears after create planning', async () => {
+    const home = await tempHome();
+    const knowledgeBase = join(home, 'kb');
+    const source = join(home, 'workspace', 'repo', 'doc', 'faq', 'stale.md');
+    const destination = join(knowledgeBase, 'faq', 'stale.md');
+    const staleDestination = '# stale\n\n## answer\n\nExisting content.\n';
+    await writeText(source, '# source\n\n## answer\n\nSource content.\n');
+
+    const plan = await createMigrationPlan({
+      home,
+      knowledgeBase,
+      sources: await scanLocalDocs({ home }),
+    });
+    await writeText(destination, staleDestination);
+
+    await assert.rejects(
+      applyMigrationPlan(plan, { home, apply: true, writeConflicts: false }),
+      /EEXIST|exist/i
+    );
+    assert.equal(await readFile(destination, 'utf-8'), staleDestination);
+  });
+
   it('applies merges before sessions, preserves unique session bullets, and warns visibly', async () => {
     const home = await tempHome();
     const knowledgeBase = join(home, 'kb');
