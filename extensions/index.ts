@@ -4,8 +4,12 @@ import type {
 } from "@mariozechner/pi-coding-agent";
 import { Type } from '@sinclair/typebox';
 import {
-  resolveArea,
-  loadAreaConfig,
+  ensureKnowledgeBaseDirs,
+  knowledgeConfigPath,
+  loadKnowledgeConfig,
+  resolveKnowledgeBase,
+  type KnowledgeBaseResolution,
+  type KnowledgeResult,
 } from './area.js';
 import {
   existsSync,
@@ -17,28 +21,7 @@ import { fileURLToPath } from 'node:url';
 const EXT_DIR = dirname(fileURLToPath(import.meta.url));
 const PKG_DIR = join(EXT_DIR, '..');
 const HOME = process.env.HOME ?? '';
-const CONFIG_PATH = join(
-  HOME, '.pi', 'agent', 'config', 'pi-faq.json'
-);
-const areaConfigResult = loadAreaConfig(CONFIG_PATH);
-
-let configHintShown = false;
-
-function showConfigHint(
-  notify: (
-    msg: string,
-    level?: "info" | "warning" | "error"
-  ) => void
-) {
-  if (configHintShown || areaConfigResult.found) return;
-  configHintShown = true;
-  notify(
-    `No config found at ${CONFIG_PATH}. ` +
-    `Using $PWD/doc/. To configure, copy ` +
-    `config.json.example from the pi-faq repo.`,
-    "info"
-  );
-}
+const CONFIG_PATH = knowledgeConfigPath(HOME);
 
 interface QnaModeData {
   active: boolean;
@@ -51,9 +34,34 @@ function stripFrontmatter(content: string): string {
   );
 }
 
+function loadConfiguredKnowledgeBase(
+): KnowledgeResult<KnowledgeBaseResolution> {
+  const configResult = loadKnowledgeConfig({
+    home: HOME,
+    configPath: CONFIG_PATH,
+  });
+
+  if (!configResult.ok) {
+    return { ok: false, error: configResult.error };
+  }
+
+  return resolveKnowledgeBase(configResult.value, { home: HOME });
+}
+
+function ensureConfiguredKnowledgeBase(
+): KnowledgeResult<KnowledgeBaseResolution> {
+  const resolutionResult = loadConfiguredKnowledgeBase();
+
+  if (!resolutionResult.ok) {
+    return { ok: false, error: resolutionResult.error };
+  }
+
+  return ensureKnowledgeBaseDirs(resolutionResult.value);
+}
+
 function loadRetroPrompt(
   target: string,
-  area: ReturnType<typeof resolveArea>,
+  area: KnowledgeBaseResolution,
   focus?: string
 ): string {
   const path = join(PKG_DIR, 'prompts', 'retro.md');
@@ -75,7 +83,10 @@ function loadRetroPrompt(
   const lit = (s: string) => () => s;
   return prompt
     .replace(/\{\{SESSION_TARGET\}\}/g, lit(target))
-    .replace(/\{\{DOC_ROOT\}\}/g, lit(area.docRoot))
+    .replace(/\{\{KNOWLEDGE_BASE\}\}/g,
+      lit(area.knowledgeBase))
+    .replace(/\{\{DOC_ROOT\}\}/g,
+      lit(area.knowledgeBase))
     .replace(/\{\{FAQ_DIR\}\}/g, lit(area.faqDir))
     .replace(/\{\{REF_DIR\}\}/g, lit(area.refDir))
     .replace(/\{\{FOCUS\}\}\n*/g,
@@ -101,7 +112,7 @@ function restoreQnaState(
 }
 
 function getDocHint(
-  area: ReturnType<typeof resolveArea>
+  area: KnowledgeBaseResolution
 ): string {
   const hasFaq = existsSync(area.faqDir);
   const hasRef = existsSync(area.refDir);
@@ -144,7 +155,18 @@ export default function createExtension(
 
   // Inject local doc hint always; add Q&A rules when active
   pi.on("before_agent_start", async (event, ctx) => {
-    const area = resolveArea(ctx.cwd, areaConfigResult.config);
+    const areaResult = loadConfiguredKnowledgeBase();
+
+    if (!areaResult.ok) {
+      if (!qnaActive) return;
+      return {
+        systemPrompt: event.systemPrompt +
+          '\n\n## Q&A mode unavailable\n\n' +
+          areaResult.error,
+      };
+    }
+
+    const area = areaResult.value;
     const docHint = getDocHint(area);
 
     if (!qnaActive) {
@@ -186,13 +208,15 @@ export default function createExtension(
     const fillPaths = (s: string) => s
       .replace(/\{FAQ_DIR\}/g, area.faqDir)
       .replace(/\{REF_DIR\}/g, area.refDir)
-      .replace(/\{DOC_ROOT\}/g, area.docRoot);
+      .replace(/\{KNOWLEDGE_BASE\}/g, area.knowledgeBase)
+      .replace(/\{DOC_ROOT\}/g, area.knowledgeBase);
 
     const promptParts = [event.systemPrompt];
     promptParts.push(
       '## Q&A mode is ACTIVE\n\n' +
       `FAQ dir: ${area.faqDir}\n` +
       `Ref dir: ${area.refDir}\n` +
+      `Knowledgebase: ${area.knowledgeBase}\n` +
       `Source: ${area.source}\n\n` +
       fillPaths(helperContent) +
       '\n\n---\n\n' +
@@ -210,21 +234,30 @@ export default function createExtension(
     description: 'Toggle Q&A knowledge capture mode',
     handler: async (args, ctx) => {
       const isOff = args.trim().toLowerCase() === 'off';
-      qnaActive = !isOff;
-      pi.appendEntry('qna-mode', { active: qnaActive });
-      if (qnaActive) showConfigHint(ctx.ui.notify);
-
-      const area = resolveArea(ctx.cwd, areaConfigResult.config);
-      if (qnaActive) {
-        ctx.ui.notify(
-          `Q&A mode ON. Capturing to ` +
-          `${area.faqDir} and ${area.refDir} ` +
-          `(${area.source}).`,
-          "info"
-        );
-      } else {
+      if (isOff) {
+        qnaActive = false;
+        pi.appendEntry('qna-mode', { active: false });
         ctx.ui.notify('Q&A mode OFF.', "info");
+        return;
       }
+
+      const areaResult = ensureConfiguredKnowledgeBase();
+      if (!areaResult.ok) {
+        qnaActive = false;
+        pi.appendEntry('qna-mode', { active: false });
+        ctx.ui.notify(areaResult.error, "error");
+        return;
+      }
+
+      qnaActive = true;
+      pi.appendEntry('qna-mode', { active: true });
+      const area = areaResult.value;
+      ctx.ui.notify(
+        `Q&A mode ON. Capturing to ` +
+        `${area.faqDir} and ${area.refDir} ` +
+        `(${area.source}).`,
+        "info"
+      );
     },
   });
 
@@ -237,8 +270,13 @@ export default function createExtension(
       'Extract learnings from session ' +
       '(optional: session id + focus prompt)',
     handler: async (args, ctx) => {
-      showConfigHint(ctx.ui.notify);
-      const area = resolveArea(ctx.cwd, areaConfigResult.config);
+      const areaResult = ensureConfiguredKnowledgeBase();
+      if (!areaResult.ok) {
+        ctx.ui.notify(areaResult.error, "error");
+        return;
+      }
+
+      const area = areaResult.value;
 
       const parts = args.trim();
       let session = '';
