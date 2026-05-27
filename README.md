@@ -1,8 +1,6 @@
 # pi-faq
 
-Capture operational knowledge into `doc/faq/` and
-`doc/ref/` as you work — terse Q&A notes and long-form
-reference docs, with session provenance for traceability.
+Capture operational knowledge into a mandatory configured knowledgebase — terse FAQ notes and long-form reference docs, with session and project provenance for traceability.
 
 ## install
 
@@ -10,12 +8,23 @@ reference docs, with session provenance for traceability.
 pi install git:github.com/lajarre/pi-faq
 ```
 
+## configure first
+
+Create `~/.pi/agent/config/pi-faq.json` before using `/qna` or `/retro`:
+
+```json
+{
+  "knowledgeBase": "~/k/agent"
+}
+```
+
+`knowledgeBase` is the document root. It must be an absolute path or start with `~/`. No fallback destination is used.
+
 ## quickstart
 
-```
-/qna              # activate Q&A capture mode
-                  # ask questions — docs are written
-                  # automatically after each answer
+```text
+/qna              # activate Q&A capture mode after config resolves
+                  # ask questions — docs are written after answers
 /qna off          # deactivate
 
 /retro             # extract learnings from current session
@@ -24,26 +33,18 @@ pi install git:github.com/lajarre/pi-faq
 
 ## what it does
 
-When `/qna` is active, the agent writes a terse FAQ
-entry to `doc/faq/` after every answer. Detailed
-content (procedures, how-tos) goes to `doc/ref/`
-with cross-links between the two.
+When `/qna` is active, pi-faq resolves the configured knowledgebase, ensures `<knowledgeBase>/faq/` and `<knowledgeBase>/ref/` exist, then asks the agent to write a terse FAQ entry after each answer. Detailed content goes to reference docs with cross-links between the two folders.
 
-When you run `/retro`, the agent reviews the session
-(via `session_ask`), extracts non-obvious learnings,
-and writes them to the same folders.
+When you run `/retro`, pi-faq resolves the same configured knowledgebase, ensures the direct `faq/` and `ref/` children exist, then sends a retro prompt to extract non-obvious learnings from the current or named session.
 
-Both commands are user-triggered — the agent may
-suggest them but never activates without consent.
+Both commands are user-triggered — the agent may suggest them but never activates without consent. If config is missing, invalid, or directories cannot be created, `/qna` stays off and `/retro` stops before sending extraction guidance.
 
-Even with `/qna` off, pi-faq adds a terse prompt
-hint when `doc/faq/` or `doc/ref/` exists, so
-sessions know local docs may be worth searching.
+During `before_agent_start`, pi-faq adds a terse search hint only when valid config resolves and either configured docs folder exists. It does not invent another destination. If Q&A mode was active but config later becomes unusable, the hook injects only a short unavailable note instead of write obligations.
 
-## doc structure
+## knowledgebase structure
 
-```
-doc/
+```text
+<knowledgeBase>/
 ├── faq/
 │   ├── terminal.md          # terse: ## per learning
 │   ├── python.md
@@ -72,39 +73,35 @@ see [full guide](../ref/tmux-clipboard.md).
 
 ## sessions
 
-- 6eb88af6-507d-445a-b590-25dcf266d175 (my-session)
+- 6eb88af6-507d-445a-b590-25dcf266d175 (my-session) @ `~/workspace/example-repo`
 ```
 
 ### typed markers
 
-Sections use typed prefixes for search and dedup:
-`[gotcha]`, `[decision]`, `[command]`, `[config]`,
-`[workaround]`.
+Sections use typed prefixes for search and dedup: `[gotcha]`, `[decision]`, `[command]`, `[config]`, `[workaround]`.
 
 ### provenance
 
-Every file ends with a `## sessions` block listing
-contributing session UUIDs. Use `session_ask` to dig
-deeper into any session.
+Every file ends with one `## sessions` block. Each bullet combines session identity and originating project path when known:
 
-## configuration
-
-Create `~/.pi/agent/config/pi-faq.json`:
-
-```json
-{
-  "rootEnvVar": "ORG_FILE",
-  "rootEnvVarIsFile": true
-}
+```markdown
+- 6eb88af6-507d-445a-b590-25dcf266d175 (my-session) @ `~/workspace/example-repo`
+- 9a21... (retro import)
 ```
 
-| Field | Default | Description |
-|-------|---------|-------------|
-| `rootEnvVar` | none | env var for doc root |
-| `rootEnvVarIsFile` | `true` | if true, take `dirname` |
+Use the repo root when detectable, otherwise the session cwd. Preserve pathless session bullets when the path is unavailable. Do not add a separate sources block.
 
-Without config, docs go to `$PWD/doc/faq/` and
-`$PWD/doc/ref/`.
+## migration
+
+Use the explicit migration command for existing repo-local `doc/faq` and `doc/ref` markdown files:
+
+```bash
+npm run migrate
+npm run migrate -- --apply
+npm run migrate -- --apply --write-conflicts
+```
+
+Run the migration in dry-run mode first. Review the create, merge, conflict, and skip summary before adding `--apply`. Migration writes into the configured knowledgebase; source docs are not deleted, moved, or modified.
 
 ## what's included
 
@@ -119,14 +116,9 @@ Without config, docs go to `$PWD/doc/faq/` and
 
 ## for you / not for you
 
-**For you if** you want agents to accumulate durable
-knowledge as searchable docs — gotchas, config tips,
-decisions, procedures — instead of losing them in
-session history.
+**For you if** you want agents to accumulate durable knowledge as searchable docs — gotchas, config tips, decisions, procedures — instead of losing them in session history.
 
-**Not for you if** you want vector-store RAG, automatic
-memory without user consent, or a full knowledge graph.
-This is curated markdown, not a database.
+**Not for you if** you want vector-store RAG, automatic memory without user consent, or a full knowledge graph. This is curated markdown, not a database.
 
 ## license
 

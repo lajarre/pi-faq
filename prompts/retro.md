@@ -1,9 +1,9 @@
 ---
 name: retro
-description: Extract learnings from a session into configured faq/ref dirs
+description: Extract learnings from a session into the configured knowledgebase
 ---
 
-Extract durable knowledge from {SESSION_TARGET}.
+Extract durable knowledge from {SESSION_TARGET} into the configured knowledgebase.
 
 **REQUIRED:** read the `doc-faq-writing` skill first.
 
@@ -11,10 +11,8 @@ Extract durable knowledge from {SESSION_TARGET}.
 
 ## error handling — check first
 
-- if `session_ask` cannot find {SESSION_TARGET} →
-  report "session not found" and stop
-- if `{FAQ_DIR}` or `{REF_DIR}` cannot be used →
-  report "knowledgebase unavailable" and stop
+- if `session_ask` cannot find {SESSION_TARGET} → report "session not found" and stop
+- if config is missing, invalid, or directories cannot be used → report "knowledgebase unavailable" and stop
 
 ## extraction
 
@@ -37,13 +35,13 @@ Extract durable knowledge from {SESSION_TARGET}.
    - update existing file if topic matches
    - append new `##` section if topic fits
    - create new file only if nothing covers it
-   - create dirs silently if absent
 
 5. Write per `doc-faq-writing` conventions:
    - `#`/`##` structure, telegraph style
    - cross-link faq ↔ ref with relative paths
-   - `## sessions` block at end of each file
+   - exactly one `## sessions` block at end of each file
    - include source path in the session bullet when known
+   - preserve pathless provenance when source path is unavailable
 
 6. After writing, summarize:
    - which files were created/updated

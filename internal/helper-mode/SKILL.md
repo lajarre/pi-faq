@@ -8,41 +8,32 @@ description: >-
 
 # helper mode
 
-Capture Q&A knowledge into `{FAQ_DIR}` and `{REF_DIR}`
-as you answer. Activated via `/qna`, deactivated via
-`/qna off`.
+Capture Q&A knowledge into `{FAQ_DIR}` and `{REF_DIR}` as you answer. Activated via `/qna`, deactivated via `/qna off`.
 
-Writing conventions are inlined below this skill
-when Q&A mode is active. Follow them for every write.
+Writing obligations apply only after pi-faq has resolved a valid `knowledgeBase` config and enabled Q&A mode. If config is missing or invalid, do not write; report that Q&A capture is unavailable until config is fixed.
+
+Writing conventions are inlined below this skill when Q&A mode is active. Follow them for every write.
 
 ## the rule
 
-**Every answer you give MUST produce a write to
-`{FAQ_DIR}` (or `{REF_DIR}`).** This is not optional.
-The user activated `/qna` to capture knowledge.
+**Every answer you give MUST produce a write to `{FAQ_DIR}` (or `{REF_DIR}`).** This is not optional. The user activated `/qna` and config was valid, so the configured knowledgebase can receive writes.
 
-ONLY exception: your entire response is ≤1 sentence
-AND contains no code, config, or commands.
+ONLY exception: your entire response is ≤1 sentence AND contains no code, config, or commands.
 
-**Never ask ANY variant of whether to write** —
-"should I document?", "worth adding?", "want me to
-save this?". The user said yes by activating `/qna`.
+**Never ask ANY variant of whether to write** — "should I document?", "worth adding?", "want me to save this?". The user said yes by activating `/qna`.
 
 ## workflow
 
-1. `rg "^## " {FAQ_DIR}/` — search existing headings,
-   then read any files that match the topic
+1. `rg "^## " {FAQ_DIR}/` — search existing headings, then read any files that match the topic
 2. decide: create / append `##` / update existing `##`
-3. answer the question AND write to the appropriate dir
-   (includes provenance)
+3. answer the question AND write to the appropriate dir (includes provenance)
 4. mention: *"added to {FAQ_DIR}/terminal.md §copy-mode"*
 
 Steps 1-3 are ONE turn. The rule (above) applies.
 
 ## typed section markers
 
-Use typed prefixes in `##` headings for search and
-dedup:
+Use typed prefixes in `##` headings for search and dedup:
 
 - `[gotcha]` — non-obvious behavior, footgun
 - `[decision]` — choice made + rationale
@@ -68,26 +59,25 @@ If deeper → 2-line faq + link to `{REF_DIR}`.
 
 ## session provenance — NON-NEGOTIABLE
 
-Every file MUST end with `## sessions`. No exceptions.
-UUID from `$PI_SESSION_ID` or `session_lineage`. Never
-placeholder. Resolve before writing.
+Every file MUST end with exactly one `## sessions` block. UUID from `$PI_SESSION_ID` or `session_lineage`. Never placeholder. Resolve before writing.
 
     ---
     ## sessions
-    - 6eb88af6-507d-445a-b590-25dcf266d175 (my-session)
+    - 6eb88af6-507d-445a-b590-25dcf266d175 (my-session) @ `~/workspace/example-repo`
+
+Append only if that session/path pair is absent. Do not create `## sources`. Preserve pathless session bullets when no source path is available.
 
 ## routing
 
-- topic uncategorized → `{FAQ_DIR}/inbox.md`
-  (only for faq content where topic is unclear)
+- topic uncategorized → `{FAQ_DIR}/inbox.md` (only for faq content where topic is unclear)
 - unsure faq vs ref → ask the user
 - `inbox.md` is NOT a catch-all
 
 ## red flags — stop
 
-- **answering without writing** → violation. write now
-- **asking "should I document?"** or any variant →
-  violation. user already said yes via `/qna`
+- Q&A config unavailable → do not write; report unavailable capture
+- **answering without writing** while Q&A is enabled → violation. write now
+- **asking "should I document?"** or any variant → violation. user already said yes via `/qna`
 - about to create a subfolder → ask user
 - writing narrative → rewrite as reference
 - duplicating existing `##` → update instead

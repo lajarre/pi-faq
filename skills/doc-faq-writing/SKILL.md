@@ -1,21 +1,20 @@
 ---
 name: doc-faq-writing
 description: >-
-  Use when about to write or update files in doc/faq/
-  or doc/ref/. Covers format, structure, write protocol,
-  provenance, and cross-linking conventions.
+  Use when about to write or update files in configured
+  FAQ_DIR or REF_DIR. Covers format, structure, write
+  protocol, provenance, and cross-linking conventions.
 ---
 
 # doc-faq-writing skill
 
-Writing library for `{FAQ_DIR}` and `{REF_DIR}`.
+Writing library for `{FAQ_DIR}` and `{REF_DIR}`. These are resolved from the mandatory `knowledgeBase` config and already point at the configured `faq/` and `ref/` directories.
 
 ## write protocol
 
 Before every write:
 
-1. `rg "^## " {FAQ_DIR}/` — search existing headings
-   across all files, not just filenames
+1. `rg "^## " {FAQ_DIR}/` — search existing headings across all files, not just filenames
 2. read candidate files that match the topic
 3. decide:
    - **create** new file → nothing covers it
@@ -26,9 +25,7 @@ No subfolders without user confirmation.
 
 ## file naming
 
-**FAQ:** `inbox.md` for uncategorized, `<topic>.md`
-when clear. Graduate from inbox when 3+ sections on
-a recognizable topic accumulate.
+**FAQ:** `inbox.md` for uncategorized, `<topic>.md` when clear. Graduate from inbox when 3+ sections on a recognizable topic accumulate.
 
 **Ref:** `<topic>.md` — one per topic.
 
@@ -40,7 +37,7 @@ a recognizable topic accumulate.
 - `##` — one learning per heading (atomic unit)
 - no `###` or deeper
 - telegraph style, no narrative
-- `---` then `## sessions` at end (mandatory)
+- `---` then exactly one `## sessions` block at end (mandatory)
 
 **Ref structure:**
 - `#` — topic name (one per file)
@@ -48,7 +45,9 @@ a recognizable topic accumulate.
 - `##`, `###` as needed
 - telegraph style, no narrative
 - `## related` section for backlinks
-- `---` then `## sessions` at end (mandatory)
+- `---` then exactly one `## sessions` block at end (mandatory)
+
+Do not create `## sources` or any separate source/provenance block.
 
 ## typed section markers
 
@@ -77,23 +76,21 @@ Improves search, dedup, and future migration.
 
 ## provenance — MANDATORY
 
-**Every file MUST end with this block. No exceptions.**
+**Every file MUST end with exactly one `## sessions` block. No exceptions.**
 
 ```markdown
 ---
 
 ## sessions
 
-- 6eb88af6-507d-445a-b590-25dcf266d175 (my-session)
+- 6eb88af6-507d-445a-b590-25dcf266d175 (my-session) @ `~/workspace/example-repo`
+- 9a21... (retro import)
 ```
 
-Append your ID to existing lists. Get UUID from
-`$PI_SESSION_ID`.
+Append your session/path pair only when that exact pair is absent. Use the repo root if detectable, otherwise use the session cwd. If the path is unavailable, append or preserve a pathless session bullet without inventing a path. Get UUID from `$PI_SESSION_ID` or session lineage.
 
 ## write threshold
 
-**Write:** non-obvious behavior, gotchas, config,
-decisions, how-to steps.
+**Write:** non-obvious behavior, gotchas, config, decisions, how-to steps.
 
-**Skip:** trivially googleable, one-off, already
-documented.
+**Skip:** trivially googleable, one-off, already documented.
