@@ -140,6 +140,22 @@ describe('migration scanning and dry-run planning', () => {
     );
   });
 
+  it('fails instead of silently skipping unusable doc directories', async () => {
+    const home = await tempHome();
+    const blockedFaq = join(home, 'workspace', 'repo', 'doc', 'faq');
+    await writeText(blockedFaq, 'not a directory');
+
+    await assert.rejects(
+      scanLocalDocs({ home }),
+      (error) => {
+        assert.ok(error instanceof Error);
+        assert.match(error.message, /failed to scan local docs directory/);
+        assert.match(error.message, /doc\/faq/);
+        return true;
+      }
+    );
+  });
+
   it('plans creates and renders summary counts for all classes', async () => {
     const home = await tempHome();
     const knowledgeBase = join(home, 'kb');

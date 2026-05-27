@@ -115,8 +115,10 @@ async function scanProjectCandidates(
   let entries: NamedDirent[];
   try {
     entries = await readdir(current, { withFileTypes: true });
-  } catch {
-    return;
+  } catch (error) {
+    throw new Error(
+      `failed to scan migration directory ${current}: ${messageFromError(error)}`
+    );
   }
 
   for (const entry of entries) {
@@ -136,7 +138,12 @@ async function collectDocFiles(
     let entries: NamedDirent[];
     try {
       entries = await readdir(dir, { withFileTypes: true });
-    } catch {
+    } catch (error) {
+      if (!isMissingPathError(error)) {
+        throw new Error(
+          `failed to scan local docs directory ${dir}: ${messageFromError(error)}`
+        );
+      }
       continue;
     }
 
@@ -490,4 +497,21 @@ function renderConflictSidecar(
 
 function timestampForPath(now: Date): string {
   return now.toISOString().replace(/[:.]/g, '-');
+}
+
+function isMissingPathError(error: unknown): boolean {
+  if (
+    typeof error !== 'object' ||
+    error === null ||
+    !('code' in error)
+  ) {
+    return false;
+  }
+
+  const code = (error as NodeJS.ErrnoException).code;
+  return code === 'ENOENT';
+}
+
+function messageFromError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
