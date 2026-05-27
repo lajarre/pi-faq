@@ -12,6 +12,18 @@ import {
   type KnowledgeResult,
 } from './area.js';
 import {
+  buildBeforeAgentStartPrompt,
+  handleQnaCommand,
+  handleRetroCommand,
+  renderRetroPrompt,
+  type FlowNotification,
+  type RetroPromptValues,
+} from './flow.js';
+import {
+  findProjectRoot,
+  homeRelativePath,
+} from './provenance.js';
+import {
   existsSync,
   readFileSync,
 } from 'node:fs';
@@ -20,12 +32,24 @@ import { fileURLToPath } from 'node:url';
 
 const EXT_DIR = dirname(fileURLToPath(import.meta.url));
 const PKG_DIR = join(EXT_DIR, '..');
-const HOME = process.env.HOME ?? '';
-const CONFIG_PATH = knowledgeConfigPath(HOME);
+const CONFIG_DISPLAY_PATH = '~/.pi/agent/config/pi-faq.json';
 
 interface QnaModeData {
   active: boolean;
 }
+
+type ContextWithCwd = ExtensionContext & {
+  cwd?: string;
+  workingDirectory?: string;
+  workspace?: {
+    cwd?: string;
+    root?: string;
+  };
+  session?: {
+    cwd?: string;
+    workingDirectory?: string;
+  };
+};
 
 function stripFrontmatter(content: string): string {
   return content.replace(
@@ -34,65 +58,47 @@ function stripFrontmatter(content: string): string {
   );
 }
 
+function currentHome(): string {
+  return process.env.HOME ?? '';
+}
+
 function loadConfiguredKnowledgeBase(
 ): KnowledgeResult<KnowledgeBaseResolution> {
+  const home = currentHome();
   const configResult = loadKnowledgeConfig({
-    home: HOME,
-    configPath: CONFIG_PATH,
+    home,
+    configPath: knowledgeConfigPath(home),
+    displayPath: CONFIG_DISPLAY_PATH,
   });
 
   if (!configResult.ok) {
     return { ok: false, error: configResult.error };
   }
 
-  return resolveKnowledgeBase(configResult.value, { home: HOME });
+  return resolveKnowledgeBase(configResult.value, { home });
 }
 
-function ensureConfiguredKnowledgeBase(
-): KnowledgeResult<KnowledgeBaseResolution> {
-  const resolutionResult = loadConfiguredKnowledgeBase();
-
-  if (!resolutionResult.ok) {
-    return { ok: false, error: resolutionResult.error };
+function loadPackageFile(
+  path: string,
+  fallback = ''
+): string {
+  try {
+    return stripFrontmatter(readFileSync(path, 'utf-8'));
+  } catch {
+    return fallback;
   }
-
-  return ensureKnowledgeBaseDirs(resolutionResult.value);
 }
 
 function loadRetroPrompt(
-  target: string,
-  area: KnowledgeBaseResolution,
-  focus?: string
+  values: RetroPromptValues
 ): string {
   const path = join(PKG_DIR, 'prompts', 'retro.md');
-  let prompt = '';
-  try {
-    prompt = stripFrontmatter(
-      readFileSync(path, 'utf-8')
-    );
-  } catch {
-    prompt = 'Extract learnings from ' + target +
-      (focus ? `. Focus on: ${focus}` : '');
-  }
-  const focusBlock = focus
-    ? `## focus\n\nConcentrate on: ${focus}`
-    : '';
-  const focusQuery = focus
-    ? `Focus especially on: ${focus}`
-    : '';
-  const lit = (s: string) => () => s;
-  return prompt
-    .replace(/\{\{SESSION_TARGET\}\}/g, lit(target))
-    .replace(/\{\{KNOWLEDGE_BASE\}\}/g,
-      lit(area.knowledgeBase))
-    .replace(/\{\{DOC_ROOT\}\}/g,
-      lit(area.knowledgeBase))
-    .replace(/\{\{FAQ_DIR\}\}/g, lit(area.faqDir))
-    .replace(/\{\{REF_DIR\}\}/g, lit(area.refDir))
-    .replace(/\{\{FOCUS\}\}\n*/g,
-      lit(focusBlock ? focusBlock + '\n' : ''))
-    .replace(/\{\{FOCUS_QUERY\}\}\n?/g,
-      lit(focusQuery ? focusQuery + '\n' : ''));
+  const template = loadPackageFile(
+    path,
+    'Extract durable knowledge from {SESSION_TARGET}.\n\n{FOCUS}'
+  );
+
+  return renderRetroPrompt(template, values);
 }
 
 function restoreQnaState(
@@ -111,27 +117,39 @@ function restoreQnaState(
   return active;
 }
 
-function getDocHint(
-  area: KnowledgeBaseResolution
-): string {
-  const hasFaq = existsSync(area.faqDir);
-  const hasRef = existsSync(area.refDir);
-
-  if (!hasFaq && !hasRef) return '';
-
-  const lines = [
-    'local docs may exist here:',
-  ];
-
-  if (hasFaq) {
-    lines.push(`- ${area.faqDir} — terse notes`);
-  }
-  if (hasRef) {
-    lines.push(`- ${area.refDir} — longer refs`);
+function sourcePathFromContext(
+  ctx: ExtensionContext
+): string | undefined {
+  const home = currentHome();
+  const cwd = getContextCwd(ctx);
+  if (!cwd) {
+    return undefined;
   }
 
-  lines.push('search them when relevant.');
-  return lines.join('\n');
+  const projectRoot = findProjectRoot(cwd, existsSync);
+  return home ? homeRelativePath(projectRoot, home) : projectRoot;
+}
+
+function getContextCwd(
+  ctx: ExtensionContext
+): string | undefined {
+  const dynamicContext = ctx as ContextWithCwd;
+  return dynamicContext.cwd ??
+    dynamicContext.workingDirectory ??
+    dynamicContext.workspace?.cwd ??
+    dynamicContext.workspace?.root ??
+    dynamicContext.session?.cwd ??
+    dynamicContext.session?.workingDirectory ??
+    process.cwd();
+}
+
+function notifyAll(
+  ctx: ExtensionContext,
+  notifications: FlowNotification[]
+): void {
+  for (const notification of notifications) {
+    ctx.ui.notify(notification.message, notification.level);
+  }
 }
 
 export default function createExtension(
@@ -139,7 +157,6 @@ export default function createExtension(
 ) {
   let qnaActive = false;
 
-  // Restore on session lifecycle events
   pi.on("session_start", async (_event, ctx) => {
     qnaActive = restoreQnaState(ctx);
   });
@@ -153,166 +170,66 @@ export default function createExtension(
     qnaActive = restoreQnaState(ctx);
   });
 
-  // Inject local doc hint always; add Q&A rules when active
   pi.on("before_agent_start", async (event, ctx) => {
-    const areaResult = loadConfiguredKnowledgeBase();
+    const systemPrompt = buildBeforeAgentStartPrompt({
+      systemPrompt: event.systemPrompt,
+      qnaActive,
+      sourcePath: sourcePathFromContext(ctx),
+      resolveKnowledgeBase: loadConfiguredKnowledgeBase,
+      exists: existsSync,
+      helperModeContent: loadPackageFile(
+        join(PKG_DIR, 'internal', 'helper-mode', 'SKILL.md'),
+        'helper-mode skill not found.'
+      ),
+      writingConventionsContent: loadPackageFile(
+        join(PKG_DIR, 'skills', 'doc-faq-writing', 'SKILL.md')
+      ),
+    });
 
-    if (!areaResult.ok) {
-      if (!qnaActive) return;
-      return {
-        systemPrompt: event.systemPrompt +
-          '\n\n## Q&A mode unavailable\n\n' +
-          areaResult.error,
-      };
+    if (!systemPrompt) {
+      return;
     }
 
-    const area = areaResult.value;
-    const docHint = getDocHint(area);
-
-    if (!qnaActive) {
-      if (!docHint) return;
-      return {
-        systemPrompt: event.systemPrompt +
-          '\n\n## local docs\n\n' +
-          docHint,
-      };
-    }
-
-    // Load helper-mode (behavioral rules)
-    const helperPath = join(
-      PKG_DIR, 'internal', 'helper-mode', 'SKILL.md'
-    );
-    let helperContent = '';
-    try {
-      helperContent = stripFrontmatter(
-        readFileSync(helperPath, 'utf-8')
-      );
-    } catch {
-      helperContent = 'helper-mode skill not found.';
-    }
-
-    // Load doc-faq-writing (format rules)
-    const writingPath = join(
-      PKG_DIR, 'skills', 'doc-faq-writing', 'SKILL.md'
-    );
-    let writingContent = '';
-    try {
-      writingContent = stripFrontmatter(
-        readFileSync(writingPath, 'utf-8')
-      );
-    } catch {
-      writingContent = '';
-    }
-
-    // Replace placeholders with resolved absolutes
-    const fillPaths = (s: string) => s
-      .replace(/\{FAQ_DIR\}/g, area.faqDir)
-      .replace(/\{REF_DIR\}/g, area.refDir)
-      .replace(/\{KNOWLEDGE_BASE\}/g, area.knowledgeBase)
-      .replace(/\{DOC_ROOT\}/g, area.knowledgeBase);
-
-    const promptParts = [event.systemPrompt];
-    promptParts.push(
-      '## Q&A mode is ACTIVE\n\n' +
-      `FAQ dir: ${area.faqDir}\n` +
-      `Ref dir: ${area.refDir}\n` +
-      `Knowledgebase: ${area.knowledgeBase}\n` +
-      `Source: ${area.source}\n\n` +
-      fillPaths(helperContent) +
-      '\n\n---\n\n' +
-      '## Writing conventions (inlined)\n\n' +
-      fillPaths(writingContent)
-    );
-
-    return {
-      systemPrompt: promptParts.join('\n\n'),
-    };
+    return { systemPrompt };
   });
 
-  // /qna command
   pi.registerCommand('qna', {
     description: 'Toggle Q&A knowledge capture mode',
     handler: async (args, ctx) => {
-      const isOff = args.trim().toLowerCase() === 'off';
-      if (isOff) {
-        qnaActive = false;
-        pi.appendEntry('qna-mode', { active: false });
-        ctx.ui.notify('Q&A mode OFF.', "info");
-        return;
-      }
+      const decision = handleQnaCommand({
+        args,
+        resolveKnowledgeBase: loadConfiguredKnowledgeBase,
+        ensureKnowledgeBaseDirs,
+      });
 
-      const areaResult = ensureConfiguredKnowledgeBase();
-      if (!areaResult.ok) {
-        qnaActive = false;
-        pi.appendEntry('qna-mode', { active: false });
-        ctx.ui.notify(areaResult.error, "error");
-        return;
+      qnaActive = decision.active;
+      if (decision.stateEntry) {
+        pi.appendEntry('qna-mode', decision.stateEntry);
       }
-
-      qnaActive = true;
-      pi.appendEntry('qna-mode', { active: true });
-      const area = areaResult.value;
-      ctx.ui.notify(
-        `Q&A mode ON. Capturing to ` +
-        `${area.faqDir} and ${area.refDir} ` +
-        `(${area.source}).`,
-        "info"
-      );
+      notifyAll(ctx, decision.notifications);
     },
   });
 
-  // /retro command
-  // usage: /retro [session] [focus text]
-  // session is a UUID or prefix (hex/dashes);
-  // everything else is focus guidance.
   pi.registerCommand('retro', {
     description:
       'Extract learnings from session ' +
       '(optional: session id + focus prompt)',
     handler: async (args, ctx) => {
-      const areaResult = ensureConfiguredKnowledgeBase();
-      if (!areaResult.ok) {
-        ctx.ui.notify(areaResult.error, "error");
-        return;
+      const decision = handleRetroCommand({
+        args,
+        sourcePath: sourcePathFromContext(ctx),
+        resolveKnowledgeBase: loadConfiguredKnowledgeBase,
+        ensureKnowledgeBaseDirs,
+        buildPrompt: loadRetroPrompt,
+      });
+
+      notifyAll(ctx, decision.notifications);
+      if (decision.shouldSendMessage && decision.prompt) {
+        pi.sendUserMessage(decision.prompt);
       }
-
-      const area = areaResult.value;
-
-      const parts = args.trim();
-      let session = '';
-      let focus = '';
-
-      // Split on first whitespace to isolate token 1.
-      // Session IDs are UUIDs or hex prefixes: the
-      // first token is a session if it is entirely
-      // hex chars and dashes, ≥8 chars.
-      const spaceIdx = parts.search(/\s/);
-      const firstToken = spaceIdx === -1
-        ? parts
-        : parts.slice(0, spaceIdx);
-      const isSession = /^[0-9a-f][0-9a-f-]{7,}$/i
-        .test(firstToken);
-
-      if (isSession) {
-        session = firstToken;
-        focus = spaceIdx === -1
-          ? ''
-          : parts.slice(spaceIdx).trim();
-      } else {
-        focus = parts;
-      }
-
-      const target = session
-        ? `session '${session}'`
-        : 'current session';
-
-      pi.sendUserMessage(
-        loadRetroPrompt(target, area, focus || undefined)
-      );
     },
   });
 
-  // qna_mode tool — advisory only, no state mutation
   pi.registerTool({
     name: 'qna_mode',
     label: 'Q&A Mode',
@@ -345,7 +262,6 @@ export default function createExtension(
     },
   });
 
-  // retro tool — advisory only, no state mutation
   pi.registerTool({
     name: 'retro',
     label: 'Retro',

@@ -173,7 +173,6 @@ export function buildBeforeAgentStartPrompt(
       input.systemPrompt,
       '## Q&A mode unavailable',
       'pi-faq config is invalid, so Q&A capture is unavailable.',
-      resolutionResult.error,
     ].join('\n\n');
   }
 

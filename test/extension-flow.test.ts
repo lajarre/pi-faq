@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
 
 import {
@@ -24,6 +25,13 @@ function ok<T>(value: T): KnowledgeResult<T> {
 
 function error<T>(message: string): KnowledgeResult<T> {
   return { ok: false, error: message };
+}
+
+function stripFrontmatter(content: string): string {
+  return content.replace(
+    /^---[\s\S]*?---\s*\n/,
+    ''
+  );
 }
 
 function qnaFailureDecision(message: string) {
@@ -109,6 +117,76 @@ describe('/qna flow decisions', () => {
 });
 
 describe('/retro flow decisions', () => {
+  it('loads config for each command and hook invocation', () => {
+    let qnaLoads = 0;
+    handleQnaCommand({
+      args: '',
+      resolveKnowledgeBase: () => {
+        qnaLoads += 1;
+        return ok(resolution);
+      },
+      ensureKnowledgeBaseDirs: (value) => ok(value),
+    });
+    handleQnaCommand({
+      args: '',
+      resolveKnowledgeBase: () => {
+        qnaLoads += 1;
+        return error('pi-faq config requires "knowledgeBase".');
+      },
+      ensureKnowledgeBaseDirs: () => {
+        assert.fail('directory creation should not run after second resolver failure');
+      },
+    });
+
+    let retroLoads = 0;
+    handleRetroCommand({
+      args: '',
+      resolveKnowledgeBase: () => {
+        retroLoads += 1;
+        return ok(resolution);
+      },
+      ensureKnowledgeBaseDirs: (value) => ok(value),
+      buildPrompt: () => 'prompt',
+    });
+    handleRetroCommand({
+      args: '',
+      resolveKnowledgeBase: () => {
+        retroLoads += 1;
+        return error('pi-faq config requires "knowledgeBase".');
+      },
+      ensureKnowledgeBaseDirs: () => {
+        assert.fail('directory creation should not run after second resolver failure');
+      },
+      buildPrompt: () => 'unexpected prompt',
+    });
+
+    let beforeAgentLoads = 0;
+    buildBeforeAgentStartPrompt({
+      systemPrompt: 'base prompt',
+      qnaActive: false,
+      resolveKnowledgeBase: () => {
+        beforeAgentLoads += 1;
+        return ok(resolution);
+      },
+      exists: () => false,
+    });
+    buildBeforeAgentStartPrompt({
+      systemPrompt: 'base prompt',
+      qnaActive: true,
+      resolveKnowledgeBase: () => {
+        beforeAgentLoads += 1;
+        return error('pi-faq config requires "knowledgeBase".');
+      },
+      exists: () => {
+        assert.fail('filesystem fallback should not run after resolver failure');
+      },
+    });
+
+    assert.equal(qnaLoads, 2);
+    assert.equal(retroLoads, 2);
+    assert.equal(beforeAgentLoads, 2);
+  });
+
   it('does not send a prompt when config is missing or invalid', () => {
     for (const message of [
       'pi-faq config missing at ~/.pi/agent/config/pi-faq.json.',
@@ -159,6 +237,24 @@ describe('/retro flow decisions', () => {
     assert.equal(promptBuilderCalled, false);
     assert.deepEqual(sent, []);
     assert.deepEqual(decision.notifications, [{ level: 'error', message }]);
+  });
+
+  it('renders the packaged retro prompt without unresolved single-brace tokens', () => {
+    const template = stripFrontmatter(readFileSync('prompts/retro.md', 'utf-8'));
+
+    const prompt = renderRetroPrompt(template, {
+      knowledgeBase: '/knowledgebase',
+      faqDir: '/knowledgebase/faq',
+      refDir: '/knowledgebase/ref',
+      target: "session 'deadbeef'",
+      sourcePath: '/source/project',
+      focus: 'capture config details',
+    });
+
+    assert.doesNotMatch(prompt, /\{[A-Z_]+\}/);
+    assert.match(prompt, /\/source\/project/);
+    assert.match(prompt, /cwd\/project context/i);
+    assert.match(prompt, /without inventing a path/i);
   });
 
   it('builds and sends a prompt with resolved dirs, target, focus, and source path', () => {
@@ -238,7 +334,11 @@ describe('before_agent_start prompt decisions', () => {
     assert.ok(prompt);
     assert.match(prompt, /base prompt/);
     assert.match(prompt, /Q&A mode unavailable/);
-    assert.match(prompt, /pi-faq config requires "knowledgeBase"\./);
+    assert.match(
+      prompt,
+      /pi-faq config is invalid, so Q&A capture is unavailable\./
+    );
+    assert.doesNotMatch(prompt, /pi-faq config requires "knowledgeBase"/);
     assert.doesNotMatch(prompt, /Every answer MUST produce a write/);
     assert.doesNotMatch(prompt, /Writing conventions/);
     assert.doesNotMatch(prompt, /FAQ dir:/);
