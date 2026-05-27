@@ -1,7 +1,7 @@
 {
   "name": "pi-faq",
   "version": "0.1.0",
-  "description": "Knowledge capture to doc/faq/ and doc/ref/",
+  "description": "Knowledge capture to a configured faq/ref knowledgebase",
   "author": "lajarre",
   "license": "MIT",
   "keywords": ["pi-package"],
