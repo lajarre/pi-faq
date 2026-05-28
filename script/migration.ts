@@ -41,6 +41,7 @@ export interface MigrationItem {
   destinationPath: string;
   sourceProjectRoot: string;
   sourceModifiedAt: Date;
+  updatesProvenance: boolean;
   mergeSections: MarkdownSection[];
   duplicateSections: string[];
   conflicts: MigrationConflict[];
@@ -189,6 +190,7 @@ export async function createMigrationPlan(
         destinationPath,
         sourceProjectRoot: source.sourceProjectRoot,
         sourceModifiedAt: source.sourceModifiedAt,
+        updatesProvenance: false,
         mergeSections: [],
         duplicateSections: [],
         conflicts: [],
@@ -207,6 +209,12 @@ export async function createMigrationPlan(
 
     const sourceMarkdown = parseMarkdown(sourceContent);
     const destinationMarkdown = parseMarkdown(destinationContent);
+    const updatesProvenance = migrationProvenanceNeedsUpdate(
+      destinationContent,
+      source.sourceProjectRoot,
+      options.home,
+      source.sourceModifiedAt
+    );
     const mergeSections: MarkdownSection[] = [];
     const duplicateSections: string[] = [];
     const conflicts: MigrationConflict[] = [];
@@ -234,18 +242,23 @@ export async function createMigrationPlan(
     }
 
     items.push({
-      kind: classifyExistingFile(mergeSections, conflicts),
+      kind: classifyExistingFile(
+        mergeSections,
+        conflicts,
+        updatesProvenance
+      ),
       docKind: source.kind,
       sourcePath: source.sourcePath,
       destinationPath,
       sourceProjectRoot: source.sourceProjectRoot,
       sourceModifiedAt: source.sourceModifiedAt,
+      updatesProvenance,
       mergeSections,
       duplicateSections,
       conflicts,
     });
 
-    if (mergeSections.length > 0) {
+    if (mergeSections.length > 0 || updatesProvenance) {
       destinationContents.set(
         destinationPath,
         mergeMarkdown(
@@ -326,20 +339,27 @@ export async function applyMigrationPlan(
       continue;
     }
 
-    if (item.mergeSections.length > 0) {
-      const sourceContent = await readFile(item.sourcePath, 'utf-8');
-      const destinationContent = await readFile(item.destinationPath, 'utf-8');
-      const merged = mergeMarkdown(
-        destinationContent,
-        sourceContent,
-        item.mergeSections,
-        item.sourceProjectRoot,
-        options.home,
-        item.sourceModifiedAt
-      );
-      await writeFile(item.destinationPath, merged, 'utf-8');
+    if (item.mergeSections.length > 0 || item.updatesProvenance) {
+      await writeMergedDestination(item, options.home);
     }
   }
+}
+
+async function writeMergedDestination(
+  item: MigrationItem,
+  home: string
+): Promise<void> {
+  const sourceContent = await readFile(item.sourcePath, 'utf-8');
+  const destinationContent = await readFile(item.destinationPath, 'utf-8');
+  const merged = mergeMarkdown(
+    destinationContent,
+    sourceContent,
+    item.mergeSections,
+    item.sourceProjectRoot,
+    home,
+    item.sourceModifiedAt
+  );
+  await writeFile(item.destinationPath, merged, 'utf-8');
 }
 
 export function defaultConflictDir(knowledgeBase: string, now: Date): string {
@@ -391,12 +411,13 @@ function normalizeSectionContent(content: string): string {
 
 function classifyExistingFile(
   mergeSections: MarkdownSection[],
-  conflicts: MigrationConflict[]
+  conflicts: MigrationConflict[],
+  updatesProvenance: boolean
 ): MigrationKind {
   if (conflicts.length > 0) {
     return 'conflict';
   }
-  if (mergeSections.length > 0) {
+  if (mergeSections.length > 0 || updatesProvenance) {
     return 'merge';
   }
   return 'skip duplicate';
@@ -422,7 +443,9 @@ function mergeMarkdown(
   const destination = parseMarkdown(destinationContent);
   const source = parseMarkdown(sourceContent);
   const sectionsToAdd = mergeSections.map((section) => `## ${section.heading}\n\n${section.content.trim()}\n`).join('\n');
-  const body = `${destination.bodyWithoutSessions.trimEnd()}\n\n${sectionsToAdd}`;
+  const body = sectionsToAdd
+    ? `${destination.bodyWithoutSessions.trimEnd()}\n\n${sectionsToAdd}`
+    : destination.bodyWithoutSessions.trimEnd();
   return appendSessions(
     body,
     uniqueBullets([
@@ -433,16 +456,63 @@ function mergeMarkdown(
   );
 }
 
+function migrationProvenanceNeedsUpdate(
+  markdown: string,
+  sourceProjectRoot: string,
+  home: string,
+  sourceModifiedAt: Date
+): boolean {
+  return addMigrationProvenance(
+    markdown,
+    sourceProjectRoot,
+    home,
+    sourceModifiedAt
+  ) !== ensureTrailingNewline(markdown);
+}
+
 function addMigrationProvenance(
   markdown: string,
   sourceProjectRoot: string,
   home: string,
   sourceModifiedAt: Date
 ): string {
-  return appendUniqueSessionBullet(
+  const updated = replaceExistingMigrationBullet(
     ensureTrailingNewline(markdown),
+    sourceProjectRoot,
+    home,
+    sourceModifiedAt
+  );
+
+  return appendUniqueSessionBullet(
+    updated,
     formatMigrationBullet(sourceProjectRoot, home, sourceModifiedAt)
   );
+}
+
+function replaceExistingMigrationBullet(
+  markdown: string,
+  sourceProjectRoot: string,
+  home: string,
+  sourceModifiedAt: Date
+): string {
+  const path = formatMigrationBullet(sourceProjectRoot, home)
+    .match(/`(?<path>[^`]+)`/)?.groups?.path;
+  if (!path) {
+    return markdown;
+  }
+
+  const replacement = formatMigrationBullet(
+    sourceProjectRoot,
+    home,
+    sourceModifiedAt
+  );
+  return markdown.split('\n').map((line) => {
+    const match = /^- migrated from local docs @ `(?<path>[^`]+)`(?: \(source modified: \d{4}-\d{2}-\d{2}\))?$/.exec(line);
+    if (match?.groups?.path === path) {
+      return replacement;
+    }
+    return line;
+  }).join('\n');
 }
 
 function appendSessions(body: string, bullets: string[]): string {
@@ -454,21 +524,23 @@ function appendSessions(body: string, bullets: string[]): string {
 }
 
 function uniqueBullets(bullets: string[]): string[] {
-  const seen = new Set<string>();
+  const positions = new Map<string, number>();
   const unique: string[] = [];
   for (const bullet of bullets) {
     const key = bulletDedupeKey(bullet);
-    if (seen.has(key)) {
+    const position = positions.get(key);
+    if (position !== undefined) {
+      unique[position] = bullet;
       continue;
     }
-    seen.add(key);
+    positions.set(key, unique.length);
     unique.push(bullet);
   }
   return unique;
 }
 
 function bulletDedupeKey(bullet: string): string {
-  const match = /^- (?<identity>.+) @ `(?<path>[^`]+)`$/.exec(bullet);
+  const match = /^- (?<identity>.+) @ `(?<path>[^`]+)`(?: \(source modified: \d{4}-\d{2}-\d{2}\))?$/.exec(bullet);
   const sessionId = match?.groups?.identity.match(/^\S+/u)?.[0];
   const path = match?.groups?.path;
   if (sessionId && path) {

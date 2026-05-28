@@ -332,13 +332,44 @@ describe('migration apply, merges, duplicates, and conflicts', () => {
     assert.match(merged, /- migrated from local docs @ `~\/workspace\/repo`/);
   });
 
-  it('skips duplicate-only files without writing migrated provenance', async () => {
+  it('updates duplicate-only files with dated migrated provenance', async () => {
     const home = await tempHome();
     const knowledgeBase = join(home, 'kb');
     const source = join(home, 'workspace', 'repo', 'doc', 'faq', 'dupe.md');
     const destination = join(knowledgeBase, 'faq', 'dupe.md');
     const destContent = markdown('# dest\n\n## same\n\nSame content.\n');
     await writeText(source, markdown('# source\n\n## same\n\nSame content.\n'));
+    await setModifiedDate(source, '2024-12-31T23:59:59Z');
+    await writeText(destination, destContent);
+
+    const plan = await createMigrationPlan({
+      home,
+      knowledgeBase,
+      sources: await scanLocalDocs({ home }),
+    });
+    await applyMigrationPlan(plan, { home, apply: true, writeConflicts: false });
+
+    assert.equal(plan.summary.merges, 1);
+    assert.equal(plan.summary.duplicates, 0);
+    const migrated = await readFile(destination, 'utf-8');
+    assert.match(migrated, /## same\n\nSame content\./);
+    assert.match(
+      migrated,
+      /- migrated from local docs @ `~\/workspace\/repo` \(source modified: 2024-12-31\)/
+    );
+  });
+
+  it('skips duplicate-only files when dated migration provenance is already present', async () => {
+    const home = await tempHome();
+    const knowledgeBase = join(home, 'kb');
+    const source = join(home, 'workspace', 'repo', 'doc', 'faq', 'dupe.md');
+    const destination = join(knowledgeBase, 'faq', 'dupe.md');
+    await writeText(source, markdown('# source\n\n## same\n\nSame content.\n'));
+    await setModifiedDate(source, '2024-12-31T23:59:59Z');
+    const destContent = markdown(
+      '# dest\n\n## same\n\nSame content.\n',
+      '- migrated from local docs @ `~/workspace/repo` (source modified: 2024-12-31)\n'
+    );
     await writeText(destination, destContent);
     const before = await stat(destination);
 
@@ -352,7 +383,33 @@ describe('migration apply, merges, duplicates, and conflicts', () => {
     assert.equal(plan.summary.duplicates, 1);
     assert.equal(await readFile(destination, 'utf-8'), destContent);
     assert.equal((await stat(destination)).mtimeMs, before.mtimeMs);
-    assert.doesNotMatch(destContent, /migrated from local docs/);
+  });
+
+  it('upgrades undated migrated provenance during merges', async () => {
+    const home = await tempHome();
+    const knowledgeBase = join(home, 'kb');
+    const source = join(home, 'workspace', 'repo', 'doc', 'faq', 'dated.md');
+    const destination = join(knowledgeBase, 'faq', 'dated.md');
+    await writeText(source, markdown('# source\n\n## existing\n\nSame.\n'));
+    await setModifiedDate(source, '2023-06-07T08:09:10Z');
+    await writeText(destination, markdown(
+      '# dest\n\n## existing\n\nSame.\n',
+      '- migrated from local docs @ `~/workspace/repo`\n'
+    ));
+
+    const plan = await createMigrationPlan({
+      home,
+      knowledgeBase,
+      sources: await scanLocalDocs({ home }),
+    });
+    await applyMigrationPlan(plan, { home, apply: true, writeConflicts: false });
+
+    const migrated = await readFile(destination, 'utf-8');
+    assert.doesNotMatch(migrated, /- migrated from local docs @ `~\/workspace\/repo`\n/);
+    assert.match(
+      migrated,
+      /- migrated from local docs @ `~\/workspace\/repo` \(source modified: 2023-06-07\)/
+    );
   });
 
   it('classifies conflicts and refuses apply without conflict sidecar permission', async () => {

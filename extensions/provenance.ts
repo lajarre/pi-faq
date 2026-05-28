@@ -155,7 +155,7 @@ function hasDuplicateSessionBullet(markdown: string, bullet: string): boolean {
 function parsePathBullet(
   bullet: string
 ): { sessionId: string; path: string } | undefined {
-  const match = /^- (?<identity>.+) @ `(?<path>[^`]+)`$/.exec(bullet);
+  const match = /^- (?<identity>.+) @ `(?<path>[^`]+)`(?: \(source modified: \d{4}-\d{2}-\d{2}\))?$/.exec(bullet);
   if (!match?.groups) {
     return undefined;
   }
