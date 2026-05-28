@@ -101,7 +101,7 @@ npm run migrate -- --apply
 npm run migrate -- --apply --write-conflicts
 ```
 
-Run the migration in dry-run mode first. Review the create, merge, conflict, and skip summary before adding `--apply`. Migration writes into the configured knowledgebase; source docs are not deleted, moved, or modified.
+Run the migration in dry-run mode first. Review the create, merge, conflict, and skip summary before adding `--apply`. Migration writes into the configured knowledgebase; source docs are not deleted, moved, or modified. Migrated provenance records the source file's last-modified date as a staleness baseline.
 
 ## what's included
 

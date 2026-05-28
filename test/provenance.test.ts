@@ -77,8 +77,12 @@ describe('provenance bullet formatting', () => {
 
   it('formats migration provenance with a home-relative source root', () => {
     assert.equal(
-      formatMigrationBullet('/Users/example/workspace/repo', home),
-      '- migrated from local docs @ `~/workspace/repo`'
+      formatMigrationBullet(
+        '/Users/example/workspace/repo',
+        home,
+        new Date('2026-05-28T10:54:57Z')
+      ),
+      '- migrated from local docs @ `~/workspace/repo` (source modified: 2026-05-28)'
     );
   });
 });

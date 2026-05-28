@@ -96,9 +96,18 @@ export function formatSessionBullet(
 
 export function formatMigrationBullet(
   sourceProjectRoot: string,
-  home: string
+  home: string,
+  sourceModifiedAt?: Date
 ): string {
-  return `- migrated from local docs @ \`${homeRelativePath(sourceProjectRoot, home)}\``;
+  const path = homeRelativePath(sourceProjectRoot, home);
+  const modified = sourceModifiedAt
+    ? ` (source modified: ${dateOnly(sourceModifiedAt)})`
+    : '';
+  return `- migrated from local docs @ \`${path}\`${modified}`;
+}
+
+function dateOnly(date: Date): string {
+  return date.toISOString().slice(0, 10);
 }
 
 export function appendUniqueSessionBullet(markdown: string, bullet: string): string {

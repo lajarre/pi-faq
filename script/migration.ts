@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 
 import {
@@ -20,6 +20,7 @@ export interface ScannedDoc {
   kind: DocKind;
   sourcePath: string;
   sourceProjectRoot: string;
+  sourceModifiedAt: Date;
 }
 
 export interface MarkdownSection {
@@ -39,6 +40,7 @@ export interface MigrationItem {
   sourcePath: string;
   destinationPath: string;
   sourceProjectRoot: string;
+  sourceModifiedAt: Date;
   mergeSections: MarkdownSection[];
   duplicateSections: string[];
   conflicts: MigrationConflict[];
@@ -149,10 +151,13 @@ async function collectDocFiles(
 
     for (const entry of entries) {
       if (entry.isFile() && entry.name.endsWith('.md')) {
+        const sourcePath = join(dir, entry.name);
+        const metadata = await stat(sourcePath);
         results.push({
           kind,
-          sourcePath: join(dir, entry.name),
+          sourcePath,
           sourceProjectRoot: projectRoot,
+          sourceModifiedAt: metadata.mtime,
         });
       }
     }
@@ -183,13 +188,19 @@ export async function createMigrationPlan(
         sourcePath: source.sourcePath,
         destinationPath,
         sourceProjectRoot: source.sourceProjectRoot,
+        sourceModifiedAt: source.sourceModifiedAt,
         mergeSections: [],
         duplicateSections: [],
         conflicts: [],
       });
       destinationContents.set(
         destinationPath,
-        addMigrationProvenance(sourceContent, source.sourceProjectRoot, options.home)
+        addMigrationProvenance(
+          sourceContent,
+          source.sourceProjectRoot,
+          options.home,
+          source.sourceModifiedAt
+        )
       );
       continue;
     }
@@ -228,6 +239,7 @@ export async function createMigrationPlan(
       sourcePath: source.sourcePath,
       destinationPath,
       sourceProjectRoot: source.sourceProjectRoot,
+      sourceModifiedAt: source.sourceModifiedAt,
       mergeSections,
       duplicateSections,
       conflicts,
@@ -241,7 +253,8 @@ export async function createMigrationPlan(
           sourceContent,
           mergeSections,
           source.sourceProjectRoot,
-          options.home
+          options.home,
+          source.sourceModifiedAt
         )
       );
     }
@@ -305,7 +318,8 @@ export async function applyMigrationPlan(
       const content = addMigrationProvenance(
         sourceContent,
         item.sourceProjectRoot,
-        options.home
+        options.home,
+        item.sourceModifiedAt
       );
       await mkdir(dirname(item.destinationPath), { recursive: true });
       await writeFile(item.destinationPath, content, { encoding: 'utf-8', flag: 'wx' });
@@ -320,7 +334,8 @@ export async function applyMigrationPlan(
         sourceContent,
         item.mergeSections,
         item.sourceProjectRoot,
-        options.home
+        options.home,
+        item.sourceModifiedAt
       );
       await writeFile(item.destinationPath, merged, 'utf-8');
     }
@@ -401,7 +416,8 @@ function mergeMarkdown(
   sourceContent: string,
   mergeSections: MarkdownSection[],
   sourceProjectRoot: string,
-  home: string
+  home: string,
+  sourceModifiedAt: Date
 ): string {
   const destination = parseMarkdown(destinationContent);
   const source = parseMarkdown(sourceContent);
@@ -412,7 +428,7 @@ function mergeMarkdown(
     uniqueBullets([
       ...destination.sessions,
       ...source.sessions,
-      formatMigrationBullet(sourceProjectRoot, home),
+      formatMigrationBullet(sourceProjectRoot, home, sourceModifiedAt),
     ])
   );
 }
@@ -420,11 +436,12 @@ function mergeMarkdown(
 function addMigrationProvenance(
   markdown: string,
   sourceProjectRoot: string,
-  home: string
+  home: string,
+  sourceModifiedAt: Date
 ): string {
   return appendUniqueSessionBullet(
     ensureTrailingNewline(markdown),
-    formatMigrationBullet(sourceProjectRoot, home)
+    formatMigrationBullet(sourceProjectRoot, home, sourceModifiedAt)
   );
 }
 

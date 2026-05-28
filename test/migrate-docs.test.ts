@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
-import { mkdtemp, mkdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, stat, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { describe, it } from 'node:test';
@@ -24,6 +24,11 @@ async function tempHome(): Promise<string> {
 async function writeText(path: string, content: string): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, content, 'utf-8');
+}
+
+async function setModifiedDate(path: string, iso: string): Promise<void> {
+  const date = new Date(iso);
+  await utimes(path, date, date);
 }
 
 async function configureKnowledgeBase(home: string, knowledgeBase: string): Promise<void> {
@@ -209,6 +214,7 @@ describe('migration apply, merges, duplicates, and conflicts', () => {
     const source = join(home, 'workspace', 'repo', 'doc', 'faq', 'create.md');
     const sourceContent = markdown('# create\n\n## answer\n\nCreated content.\n');
     await writeText(source, sourceContent);
+    await setModifiedDate(source, '2025-01-02T03:04:05Z');
 
     const plan = await createMigrationPlan({
       home,
@@ -220,7 +226,10 @@ describe('migration apply, merges, duplicates, and conflicts', () => {
     const destination = await readFile(join(knowledgeBase, 'faq', 'create.md'), 'utf-8');
     assert.match(destination, /## answer\n\nCreated content\./);
     assert.match(destination, /- existing-session @ `~\/workspace\/repo`/);
-    assert.match(destination, /- migrated from local docs @ `~\/workspace\/repo`/);
+    assert.match(
+      destination,
+      /- migrated from local docs @ `~\/workspace\/repo` \(source modified: 2025-01-02\)/
+    );
     assert.equal(await readFile(source, 'utf-8'), sourceContent);
   });
 
