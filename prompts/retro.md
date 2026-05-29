@@ -41,6 +41,7 @@ Extract durable knowledge from {SESSION_TARGET} into the configured knowledgebas
    - cross-link faq ↔ ref with relative paths
    - exactly one `## sessions` block at end of each file
    - include source path in the session bullet when known
+   - append capture date `{CAPTURE_DATE}` as `@ YYYY-MM-DD`
    - preserve pathless provenance when source path is unavailable
 
 6. After writing, summarize:
@@ -56,3 +57,4 @@ Extract durable knowledge from {SESSION_TARGET} into the configured knowledgebas
 - faq dir: {FAQ_DIR}
 - ref dir: {REF_DIR}
 - source path: {SOURCE_PATH}
+- capture date: {CAPTURE_DATE}

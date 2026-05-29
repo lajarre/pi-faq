@@ -25,18 +25,18 @@ Route by depth: short gotchas → `{FAQ_DIR}`, multi-step guides → `{REF_DIR}`
 
 ## provenance model
 
-Every file has exactly one `## sessions` block. Each bullet records one session/path pair when the path is known:
+Every file has exactly one `## sessions` block. Each bullet records one session/path/date tuple when the path is known:
 
 ```markdown
 ---
 
 ## sessions
 
-- 6eb88af6-507d-445a-b590-25dcf266d175 (my-session) @ `~/workspace/example-repo`
-- 9a21... (retro import)
+- 6eb88af6-507d-445a-b590-25dcf266d175 (my-session) @ `~/workspace/example-repo` @ {CAPTURE_DATE}
+- 9a21... (retro import) @ {CAPTURE_DATE}
 ```
 
-Do not create `## sources` or another provenance block. Add a bullet only when that session/path pair is not already present. Preserve pathless historical bullets when no source path is available.
+Do not create `## sources` or another provenance block. Add a bullet only when that session/path pair is not already present; if the matching bullet is missing the trailing date, update it. Preserve pathless historical bullets when no source path is available.
 
 ## detailed rules
 

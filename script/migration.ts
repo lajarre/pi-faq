@@ -540,7 +540,7 @@ function uniqueBullets(bullets: string[]): string[] {
 }
 
 function bulletDedupeKey(bullet: string): string {
-  const match = /^- (?<identity>.+) @ `(?<path>[^`]+)`(?: \(source modified: \d{4}-\d{2}-\d{2}\))?$/.exec(bullet);
+  const match = /^- (?<identity>.+) @ `(?<path>[^`]+)`(?: @ \d{4}-\d{2}-\d{2})?(?: \(source modified: \d{4}-\d{2}-\d{2}\))?$/.exec(bullet);
   const sessionId = match?.groups?.identity.match(/^\S+/u)?.[0];
   const path = match?.groups?.path;
   if (sessionId && path) {

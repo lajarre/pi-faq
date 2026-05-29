@@ -63,9 +63,9 @@ Every file MUST end with exactly one `## sessions` block. UUID from `$PI_SESSION
 
     ---
     ## sessions
-    - 6eb88af6-507d-445a-b590-25dcf266d175 (my-session) @ `~/workspace/example-repo`
+    - 6eb88af6-507d-445a-b590-25dcf266d175 (my-session) @ `~/workspace/example-repo` @ {CAPTURE_DATE}
 
-Append only if that session/path pair is absent. Do not create `## sources`. Preserve pathless session bullets when no source path is available.
+Append with capture date `{CAPTURE_DATE}`. Do not write the word "captured". If no source path is available, use `- <session> @ {CAPTURE_DATE}` without inventing a path. Append only if that session/path pair is absent; update a matching undated bullet instead of adding a duplicate. Do not create `## sources`. Preserve pathless historical session bullets when no source path is available.
 
 ## routing
 

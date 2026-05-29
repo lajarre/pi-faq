@@ -22,7 +22,8 @@
     "typecheck": "tsc --noEmit",
     "test": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test test/*.test.ts",
     "check": "npm run typecheck && npm test",
-    "migrate": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON script/migrate-docs.ts"
+    "migrate": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON script/migrate-docs.ts",
+    "validate-provenance": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON script/validate-provenance.ts"
   },
   "pi": {
     "extensions": ["./extensions"],

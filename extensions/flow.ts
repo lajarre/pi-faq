@@ -39,6 +39,7 @@ export interface RetroPromptValues {
   knowledgeBase: string;
   faqDir: string;
   refDir: string;
+  captureDate: string;
   target: string;
   session?: string;
   focus?: string;
@@ -47,6 +48,7 @@ export interface RetroPromptValues {
 
 export interface RetroCommandInput {
   args: string;
+  captureDate?: string;
   sourcePath?: string;
   resolveKnowledgeBase: () => KnowledgeResult<KnowledgeBaseResolution>;
   ensureKnowledgeBaseDirs: (
@@ -72,6 +74,7 @@ export interface RetroArgs {
 export interface BeforeAgentStartPromptInput {
   systemPrompt: string;
   qnaActive: boolean;
+  captureDate?: string;
   sourcePath?: string;
   resolveKnowledgeBase: () => KnowledgeResult<KnowledgeBaseResolution>;
   exists: (path: string) => boolean;
@@ -137,6 +140,7 @@ export function handleRetroCommand(
     knowledgeBase: resolution.knowledgeBase,
     faqDir: resolution.faqDir,
     refDir: resolution.refDir,
+    captureDate: input.captureDate ?? today(),
     target: args.target,
     sourcePath: input.sourcePath,
   };
@@ -192,15 +196,18 @@ export function buildBeforeAgentStartPrompt(
   }
 
   const sourcePath = input.sourcePath ?? 'unavailable';
+  const captureDate = input.captureDate ?? today();
   const helperModeContent = fillFlowTokens(
     input.helperModeContent ?? '',
     resolution,
-    sourcePath
+    sourcePath,
+    captureDate
   );
   const writingConventionsContent = fillFlowTokens(
     input.writingConventionsContent ?? '',
     resolution,
-    sourcePath
+    sourcePath,
+    captureDate
   );
 
   return [
@@ -210,6 +217,7 @@ export function buildBeforeAgentStartPrompt(
       `FAQ dir: ${resolution.faqDir}\n` +
       `Ref dir: ${resolution.refDir}\n` +
       `Source path: ${sourcePath}\n\n` +
+      `Capture date: ${captureDate}\n\n` +
       helperModeContent +
       '\n\n---\n\n' +
       '## Writing conventions (inlined)\n\n' +
@@ -227,6 +235,7 @@ export function renderRetroPrompt(
     KNOWLEDGE_BASE: values.knowledgeBase,
     FAQ_DIR: values.faqDir,
     REF_DIR: values.refDir,
+    CAPTURE_DATE: values.captureDate,
     SOURCE_PATH: values.sourcePath ?? '',
     FOCUS: focus ? `## focus\n\nConcentrate on: ${focus}` : '',
     FOCUS_QUERY: focus ? `Focus especially on: ${focus}` : '',
@@ -306,12 +315,14 @@ function buildLocalDocHint(
 function fillFlowTokens(
   template: string,
   resolution: KnowledgeBaseResolution,
-  sourcePath: string
+  sourcePath: string,
+  captureDate: string
 ): string {
   return replaceSingleBraceTokens(template, {
     KNOWLEDGE_BASE: resolution.knowledgeBase,
     FAQ_DIR: resolution.faqDir,
     REF_DIR: resolution.refDir,
+    CAPTURE_DATE: captureDate,
     SOURCE_PATH: sourcePath,
   });
 }
@@ -321,7 +332,11 @@ function replaceSingleBraceTokens(
   replacements: Record<string, string>
 ): string {
   return template.replace(
-    /\{(SESSION_TARGET|KNOWLEDGE_BASE|FAQ_DIR|REF_DIR|SOURCE_PATH|FOCUS|FOCUS_QUERY)\}/g,
+    /\{(SESSION_TARGET|KNOWLEDGE_BASE|FAQ_DIR|REF_DIR|CAPTURE_DATE|SOURCE_PATH|FOCUS|FOCUS_QUERY)\}/g,
     (_token, key: string) => replacements[key] ?? ''
   );
+}
+
+function today(): string {
+  return new Date().toISOString().slice(0, 10);
 }

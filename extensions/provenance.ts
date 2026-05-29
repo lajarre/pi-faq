@@ -84,14 +84,16 @@ export function sourcePathFromContext(
 export function formatSessionBullet(
   session: { id: string; name?: string },
   sourcePath: string | undefined,
-  home: string
+  home: string,
+  capturedAt: Date | string
 ): string {
   const identity = session.name ? `${session.id} (${session.name})` : session.id;
+  const capturedDate = dateOnly(capturedAt);
   if (!sourcePath) {
-    return `- ${identity}`;
+    return `- ${identity} @ ${capturedDate}`;
   }
 
-  return `- ${identity} @ \`${homeRelativePath(sourcePath, home)}\``;
+  return `- ${identity} @ \`${homeRelativePath(sourcePath, home)}\` @ ${capturedDate}`;
 }
 
 export function formatMigrationBullet(
@@ -106,11 +108,21 @@ export function formatMigrationBullet(
   return `- migrated from local docs @ \`${path}\`${modified}`;
 }
 
-function dateOnly(date: Date): string {
-  return date.toISOString().slice(0, 10);
+function dateOnly(date: Date | string): string {
+  if (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return date;
+  }
+
+  const parsed = typeof date === 'string' ? new Date(date) : date;
+  return parsed.toISOString().slice(0, 10);
 }
 
 export function appendUniqueSessionBullet(markdown: string, bullet: string): string {
+  const upgraded = replaceUndatedMatchingBullet(markdown, bullet);
+  if (upgraded !== markdown) {
+    return upgraded;
+  }
+
   if (hasDuplicateSessionBullet(markdown, bullet)) {
     return markdown;
   }
@@ -152,10 +164,77 @@ function hasDuplicateSessionBullet(markdown: string, bullet: string): boolean {
   return false;
 }
 
+function replaceUndatedMatchingBullet(markdown: string, bullet: string): string {
+  const newBulletParts = parsePathBullet(bullet);
+  if (!newBulletParts?.captureDate) {
+    return markdown;
+  }
+
+  const lines = markdown.split('\n');
+  const replaceIndex = lines.findIndex((line) => {
+    const existingParts = parsePathBullet(line);
+    return existingParts !== undefined &&
+      existingParts.sessionId === newBulletParts.sessionId &&
+      existingParts.path === newBulletParts.path &&
+      existingParts.captureDate === undefined;
+  });
+
+  if (replaceIndex === -1) {
+    return markdown;
+  }
+
+  lines[replaceIndex] = bullet;
+  return lines.join('\n');
+}
+
+export interface UndatedSessionBulletIssue {
+  line: number;
+  bullet: string;
+}
+
+export function findUndatedSessionBullets(
+  markdown: string
+): UndatedSessionBulletIssue[] {
+  const sessionsHeading = findSessionsHeading(markdown);
+  if (!sessionsHeading) {
+    return [];
+  }
+
+  const sessionsEnd = findSessionsBlockEnd(markdown, sessionsHeading.contentStart);
+  const prefixLineCount = markdown.slice(0, sessionsHeading.contentStart)
+    .split('\n').length - 1;
+  const lines = markdown.slice(sessionsHeading.contentStart, sessionsEnd).split('\n');
+  const issues: UndatedSessionBulletIssue[] = [];
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index]?.trimEnd() ?? '';
+    if (!line.startsWith('- ')) {
+      continue;
+    }
+    if (isMigrationBullet(line)) {
+      continue;
+    }
+
+    const parts = parsePathBullet(line);
+    if (!parts?.captureDate) {
+      issues.push({
+        line: prefixLineCount + index + 1,
+        bullet: line,
+      });
+    }
+  }
+
+  return issues;
+}
+
 function parsePathBullet(
   bullet: string
-): { sessionId: string; path: string } | undefined {
-  const match = /^- (?<identity>.+) @ `(?<path>[^`]+)`(?: \(source modified: \d{4}-\d{2}-\d{2}\))?$/.exec(bullet);
+): { sessionId: string; path?: string; captureDate?: string } | undefined {
+  const pathMatch = /^- (?<identity>.+) @ `(?<path>[^`]+)`(?: @ (?<captureDate>\d{4}-\d{2}-\d{2}))?(?: \(source modified: \d{4}-\d{2}-\d{2}\))?$/.exec(bullet);
+  const pathlessDatedMatch = /^- (?<identity>.+) @ (?<captureDate>\d{4}-\d{2}-\d{2})$/.exec(bullet);
+  const legacyPathlessMatch = /^- (?<identity>.+)$/.exec(bullet);
+  const match = pathMatch ?? pathlessDatedMatch ?? legacyPathlessMatch;
+
   if (!match?.groups) {
     return undefined;
   }
@@ -168,7 +247,12 @@ function parsePathBullet(
   return {
     sessionId,
     path: match.groups.path,
+    captureDate: match.groups.captureDate,
   };
+}
+
+function isMigrationBullet(line: string): boolean {
+  return /^- migrated from local docs @ `[^`]+`(?: \(source modified: \d{4}-\d{2}-\d{2}\))?$/.test(line);
 }
 
 function findSessionsHeading(

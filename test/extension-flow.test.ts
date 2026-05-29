@@ -250,6 +250,7 @@ describe('/retro flow decisions', () => {
       knowledgeBase: '/knowledgebase',
       faqDir: '/knowledgebase/faq',
       refDir: '/knowledgebase/ref',
+      captureDate: '2026-05-29',
       target: "session 'deadbeef'",
       sourcePath: '/source/project',
       focus: 'capture config details',
@@ -270,12 +271,14 @@ describe('/retro flow decisions', () => {
       'faq={FAQ_DIR}',
       'ref={REF_DIR}',
       'source={SOURCE_PATH}',
+      'capture={CAPTURE_DATE}',
       'focus={FOCUS}',
       'query={FOCUS_QUERY}',
     ].join('\n');
 
     const decision = handleRetroCommand({
       args: 'deadbeef capture config details',
+      captureDate: '2026-05-29',
       sourcePath: '/source/project',
       resolveKnowledgeBase: () => ok(resolution),
       ensureKnowledgeBaseDirs: (value) => ok(value),
@@ -292,6 +295,7 @@ describe('/retro flow decisions', () => {
       knowledgeBase: '/knowledgebase',
       faqDir: '/knowledgebase/faq',
       refDir: '/knowledgebase/ref',
+      captureDate: '2026-05-29',
       target: "session 'deadbeef'",
       session: 'deadbeef',
       focus: 'capture config details',
@@ -302,6 +306,7 @@ describe('/retro flow decisions', () => {
     assert.match(sent[0] ?? '', /faq=\/knowledgebase\/faq/);
     assert.match(sent[0] ?? '', /ref=\/knowledgebase\/ref/);
     assert.match(sent[0] ?? '', /source=\/source\/project/);
+    assert.match(sent[0] ?? '', /capture=2026-05-29/);
     assert.match(sent[0] ?? '', /Concentrate on: capture config details/);
     assert.match(sent[0] ?? '', /Focus especially on: capture config details/);
   });
@@ -380,11 +385,12 @@ describe('before_agent_start prompt decisions', () => {
     const prompt = buildBeforeAgentStartPrompt({
       systemPrompt: 'base prompt',
       qnaActive: true,
+      captureDate: '2026-05-29',
       sourcePath: '/source/project',
       resolveKnowledgeBase: () => ok(resolution),
       exists: () => false,
-      helperModeContent: 'helper-mode content for {FAQ_DIR} from {SOURCE_PATH}',
-      writingConventionsContent: 'writing conventions for {REF_DIR} in {KNOWLEDGE_BASE}',
+      helperModeContent: 'helper-mode content for {FAQ_DIR} from {SOURCE_PATH} on {CAPTURE_DATE}',
+      writingConventionsContent: 'writing conventions for {REF_DIR} in {KNOWLEDGE_BASE} on {CAPTURE_DATE}',
     });
 
     assert.ok(prompt);
@@ -393,8 +399,9 @@ describe('before_agent_start prompt decisions', () => {
     assert.match(prompt, /FAQ dir: \/knowledgebase\/faq/);
     assert.match(prompt, /Ref dir: \/knowledgebase\/ref/);
     assert.match(prompt, /Source path: \/source\/project/);
-    assert.match(prompt, /helper-mode content for \/knowledgebase\/faq from \/source\/project/);
+    assert.match(prompt, /Capture date: 2026-05-29/);
+    assert.match(prompt, /helper-mode content for \/knowledgebase\/faq from \/source\/project on 2026-05-29/);
     assert.match(prompt, /## Writing conventions/);
-    assert.match(prompt, /writing conventions for \/knowledgebase\/ref in \/knowledgebase/);
+    assert.match(prompt, /writing conventions for \/knowledgebase\/ref in \/knowledgebase on 2026-05-29/);
   });
 });

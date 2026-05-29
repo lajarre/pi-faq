@@ -83,11 +83,11 @@ Improves search, dedup, and future migration.
 
 ## sessions
 
-- 6eb88af6-507d-445a-b590-25dcf266d175 (my-session) @ `~/workspace/example-repo`
-- 9a21... (retro import)
+- 6eb88af6-507d-445a-b590-25dcf266d175 (my-session) @ `~/workspace/example-repo` @ {CAPTURE_DATE}
+- 9a21... (retro import) @ {CAPTURE_DATE}
 ```
 
-Append your session/path pair only when that exact pair is absent. Use the repo root if detectable, otherwise use the session cwd. If the path is unavailable, append or preserve a pathless session bullet without inventing a path. Get UUID from `$PI_SESSION_ID` or session lineage.
+Append your session/path/date bullet using the capture date `{CAPTURE_DATE}`. Use the repo root if detectable, otherwise use the session cwd. If the path is unavailable, use `- <session> @ {CAPTURE_DATE}` without inventing a path. Do not write the word "captured". If the same session/path bullet already exists without a trailing date, update it instead of adding a duplicate. Get UUID from `$PI_SESSION_ID` or session lineage.
 
 ## write threshold
 

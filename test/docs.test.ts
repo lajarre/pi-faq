@@ -40,7 +40,9 @@ describe('user-facing knowledgebase documentation', () => {
       '/retro',
       'before_agent_start',
       '## sessions',
-      '@ `~/workspace/example-repo`',
+      '@ `~/workspace/example-repo` @ 2026-05-29',
+      'Do not add a separate sources block',
+      'npm run validate-provenance',
       'Run the migration in dry-run mode first',
       'source docs are not deleted, moved, or modified',
     ]) {
@@ -68,8 +70,9 @@ describe('user-facing knowledgebase documentation', () => {
       'resolved from the mandatory `knowledgeBase` config',
       'exactly one `## sessions` block',
       'Do not create `## sources`',
-      'session/path pair',
-      '@ `~/workspace/example-repo`',
+      'session/path/date tuple',
+      '@ `~/workspace/example-repo` @ {CAPTURE_DATE}',
+      'Do not write the word "captured"',
     ]) {
       assert.match(combined, new RegExp(escapeRegExp(expected)));
     }
@@ -99,6 +102,7 @@ describe('user-facing knowledgebase documentation', () => {
       '{FAQ_DIR}',
       '{REF_DIR}',
       '{SOURCE_PATH}',
+      '{CAPTURE_DATE}',
       '{SESSION_TARGET}',
       '{FOCUS}',
       '{FOCUS_QUERY}',

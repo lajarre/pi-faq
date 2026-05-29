@@ -48,6 +48,10 @@ function currentHome(): string {
   return process.env.HOME ?? '';
 }
 
+function currentCaptureDate(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
 function loadConfiguredKnowledgeBase(
 ): KnowledgeResult<KnowledgeBaseResolution> {
   const home = currentHome();
@@ -134,6 +138,7 @@ export default function createExtension(
     const systemPrompt = buildBeforeAgentStartPrompt({
       systemPrompt: event.systemPrompt,
       qnaActive,
+      captureDate: currentCaptureDate(),
       sourcePath: sourcePathFromContext(ctx, {
         home: currentHome(),
         exists: existsSync,

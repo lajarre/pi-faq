@@ -73,7 +73,7 @@ see [full guide](../ref/tmux-clipboard.md).
 
 ## sessions
 
-- 6eb88af6-507d-445a-b590-25dcf266d175 (my-session) @ `~/workspace/example-repo`
+- 6eb88af6-507d-445a-b590-25dcf266d175 (my-session) @ `~/workspace/example-repo` @ 2026-05-29
 ```
 
 ### typed markers
@@ -82,14 +82,20 @@ Sections use typed prefixes for search and dedup: `[gotcha]`, `[decision]`, `[co
 
 ### provenance
 
-Every file ends with one `## sessions` block. Each bullet combines session identity and originating project path when known:
+Every file ends with one `## sessions` block. Each bullet combines session identity, originating project path when known, and the capture date:
 
 ```markdown
-- 6eb88af6-507d-445a-b590-25dcf266d175 (my-session) @ `~/workspace/example-repo`
-- 9a21... (retro import)
+- 6eb88af6-507d-445a-b590-25dcf266d175 (my-session) @ `~/workspace/example-repo` @ 2026-05-29
+- 9a21... (retro import) @ 2026-05-29
 ```
 
-Use the repo root when detectable, otherwise the session cwd. Preserve pathless session bullets when the path is unavailable. Do not add a separate sources block.
+Use the repo root when detectable, otherwise the session cwd. Use the resolved capture date; do not write the word "captured". Preserve pathless historical session bullets when the path is unavailable. Do not add a separate sources block.
+
+To audit older notes for missing capture dates:
+
+```bash
+npm run validate-provenance
+```
 
 ## migration
 
@@ -109,6 +115,7 @@ Run the migration in dry-run mode first. Review the create, merge, conflict, and
 |----------|------|---------|
 | `/qna` | command | toggle Q&A capture mode |
 | `/retro` | command | extract session learnings |
+| `npm run validate-provenance` | script | flag undated session bullets |
 | `qna_mode` | tool | advisory: suggest `/qna` |
 | `retro` | tool | advisory: suggest `/retro` |
 | `doc-faq` | skill | convention index |
